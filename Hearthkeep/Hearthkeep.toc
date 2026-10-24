@@ -7,3 +7,5 @@
 
 Core.lua
 Storage.lua
+Diagnostics.lua
+Compat.lua
