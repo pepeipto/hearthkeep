@@ -1,5 +1,5 @@
 -- Plain-Lua test runner. Run from the repo root: luajit tests/run.lua
-local FILES = { "test_core", "test_storage", "test_compat", "test_options" }
+local FILES = { "test_core", "test_storage", "test_compat", "test_options", "test_alts_data" }
 local out = print
 
 Stub = dofile("tests/wowstub.lua")
