@@ -6,6 +6,8 @@
 ## SavedVariables: HearthkeepDB
 
 Core.lua
+Locale.lua
 Storage.lua
 Diagnostics.lua
 Compat.lua
+Options.lua
