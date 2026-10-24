@@ -21,6 +21,8 @@ function frameMethods.Hide(self) self.shown = false end
 function frameMethods.IsShown(self) return self.shown end
 function frameMethods.IsVisible(self) return self.shown end
 function frameMethods.SetShown(self, shown) self.shown = shown and true or false end
+function frameMethods.SetText(self, text) self.text = text end
+function frameMethods.GetText(self) return self.text end
 
 local function noop() end
 

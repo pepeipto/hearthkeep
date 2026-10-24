@@ -9,4 +9,6 @@ Format.lua
 Store.lua
 Query.lua
 Capture.lua
+Window.lua
+Minimap.lua
 Alts.lua

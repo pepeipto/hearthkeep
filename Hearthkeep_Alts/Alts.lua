@@ -2,8 +2,17 @@ local _, Alts = ...
 local HK = _G.Hearthkeep
 
 Alts.Module = HK:RegisterModule("Alts", {
-  OnEnable = function() Alts.Capture.Snapshot() end,
+  OnEnable = function()
+    Alts.Capture.Snapshot()
+    Alts.Minimap.Create()
+  end,
+  OnDisable = function()
+    Alts.Window.Hide()
+    Alts.Minimap.Hide()
+  end,
 })
+
+HK:SetDefaultCommand(function() Alts.Window.Toggle() end)
 
 HK:RegisterEvent("PLAYER_LOGOUT", function() Alts.Capture.Snapshot() end, "Alts")
 
