@@ -43,7 +43,9 @@ Everything in this project has been tested offline against a simulated game API.
 - [ ] Re-read Blizzard's current add-on policy (only the older UI Add-On Development Policy was readable while this was built). Confirm the addon is free, the code is visible, and nothing asks for donations in the game.
 - [ ] Check the name "Hearthkeep" is still free on CurseForge, GitHub and other platforms.
 - [ ] Build `dist/Hearthkeep-<version>.zip` with `powershell -File scripts/build.ps1` and confirm it contains both `Hearthkeep/` and `Hearthkeep_Alts/`.
-- [ ] Check whether the CurseForge packager accepts this two-folder layout with `.pkgmeta` (a dry run). If not, upload the zip from `build.ps1`.
+- [ ] The repository has no `.pkgmeta` on purpose: with `package-as` the packager would wrap the repository root, giving a package the client cannot load. Upload the zip from `scripts/build.ps1`. To use the CurseForge packager instead, first move the core files to the repository root with `Hearthkeep_Alts/` as a subfolder and a `move-folders` entry, then do a dry run.
+- [ ] On a character that has collapsed the Professions header in the Skills window, check that `/hk` still lists the professions and that the header is collapsed again afterwards.
+- [ ] Only two profession cooldown spells are tracked (Transmute: Arcanite and Mooncloth). Add the others the client actually has to `Alts.Tracked`.
 - [ ] Fill `## X-Curse-Project-ID` in the core TOC once the project exists.
 - [ ] Capture every screenshot in `docs/media/shot-list.md` from the real client, using test characters. Check that no real account data is visible.
 - [ ] Record the demo video following `docs/media/video-storyboard.md`, then review it frame by frame and remove any scene that did not work as described.

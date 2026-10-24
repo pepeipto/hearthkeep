@@ -31,6 +31,13 @@ function Store.Hide(key)
   return true
 end
 
+function Store.Unhide(key)
+  local record = Store.Get(key)
+  if not record then return false end
+  record.hidden = nil
+  return true
+end
+
 function Store.Delete(key)
   local chars = characters()
   if not chars or chars[key] == nil then return false end

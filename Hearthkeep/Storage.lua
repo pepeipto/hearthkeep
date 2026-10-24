@@ -25,10 +25,44 @@ local function fill(db, def)
   end
 end
 
+local NUMERIC_FIELDS = { "level", "money", "lastSeen" }
+local LIST_FIELDS = { "professions", "cooldowns" }
+
+local function sanitizeCharacters(characters)
+  for key, record in pairs(characters) do
+    if type(record) ~= "table" then
+      characters[key] = nil
+    else
+      for _, field in ipairs(NUMERIC_FIELDS) do
+        if record[field] ~= nil then record[field] = tonumber(record[field]) end
+      end
+      for _, field in ipairs(LIST_FIELDS) do
+        local list = record[field]
+        if type(list) ~= "table" then
+          record[field] = nil
+        else
+          local clean = {}
+          for _, entry in ipairs(list) do
+            if type(entry) == "table" then clean[#clean + 1] = entry end
+          end
+          record[field] = clean
+        end
+      end
+    end
+  end
+end
+
+local function validPosition(pos)
+  return type(pos) == "table" and type(pos[1]) == "string" and type(pos[2]) == "string"
+    and type(pos[3]) == "number" and type(pos[4]) == "number"
+end
+
 function Storage.Migrate(db, migrations, target)
   migrations = migrations or Storage.migrations
   target = target or Storage.CURRENT_VERSION
   fill(db, defaults())
+  sanitizeCharacters(db.characters)
+  if db.ui.pos ~= nil and not validPosition(db.ui.pos) then db.ui.pos = nil end
   for version = db.version + 1, target do
     if migrations[version] then migrations[version](db) end
     db.version = version

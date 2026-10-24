@@ -16,6 +16,7 @@ Hearthkeep is a small core plus optional modules. Each module can be turned on o
 | `/hk modules` | List modules and whether they are on |
 | `/hk enable <module>` | Turn a module on |
 | `/hk disable <module>` | Turn a module off |
+| `/hk unhide <name\|all>` | Show a hidden character again |
 | `/hk debug` | Print diagnostics (API availability and recent errors) |
 
 ## Design notes

@@ -77,6 +77,9 @@ SlashCmdList.HEARTHKEEP = function(message)
   end
 end
 
+local boxes = {}
+local panelBuilt = false
+
 local function buildPanel(panel)
   local previous
   for _, name in ipairs(HK:ModuleNames()) do
@@ -86,12 +89,19 @@ local function buildPanel(panel)
     else
       box:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -16)
     end
-    box:SetChecked(HK:IsModuleEnabled(name))
+    local text = box:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    text:SetPoint("LEFT", box, "RIGHT", 4, 0)
+    text:SetText(name)
     box:SetScript("OnClick", function(self)
       if self:GetChecked() then HK:EnableModule(name) else HK:DisableModule(name) end
     end)
+    boxes[#boxes + 1] = { box = box, name = name }
     previous = box
   end
+end
+
+local function refreshPanel()
+  for _, entry in ipairs(boxes) do entry.box:SetChecked(HK:IsModuleEnabled(entry.name)) end
 end
 
 function Options.RegisterPanel()
@@ -104,8 +114,11 @@ function Options.RegisterPanel()
     local panel = CreateFrame("Frame")
     panel.name = "Hearthkeep"
     panel:SetScript("OnShow", function(self)
-      self:SetScript("OnShow", nil)
-      pcall(buildPanel, self)
+      if not panelBuilt then
+        panelBuilt = true
+        pcall(buildPanel, self)
+      end
+      pcall(refreshPanel)
     end)
     local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
     Settings.RegisterAddOnCategory(category)

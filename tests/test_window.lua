@@ -222,3 +222,23 @@ test("disabling the module hides the window and the button", function()
   falsy(Alts.Window.frame:IsShown())
   falsy(Alts.Minimap.button:IsShown())
 end)
+
+test("an invalid saved position cannot break the window", function()
+  local HK, Alts = setup()
+  local realCreate = CreateFrame
+  CreateFrame = function(kind, name, ...)
+    local frame = realCreate(kind, name, ...)
+    if name == "HearthkeepAltsWindow" then
+      rawset(frame, "SetPoint", function(_, point)
+        if point == nil then error("bad point") end
+      end)
+    end
+    return frame
+  end
+  HK.db.ui.pos = {}
+  Alts.Window.Toggle()
+  truthy(Alts.Window.frame:IsShown())
+  Alts.Window.Toggle()
+  Alts.Window.Toggle()
+  truthy(Alts.Window.frame:IsShown())
+end)

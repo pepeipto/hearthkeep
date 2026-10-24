@@ -112,3 +112,25 @@ test("RegisterPanel registers a category when the Settings API works", function(
   truthy(HK.Options.RegisterPanel())
   eq(registered.name, "Hearthkeep")
 end)
+
+test("panel checkboxes are labeled and refresh on every show", function()
+  local HK = Stub.load("Hearthkeep")
+  HK:RegisterModule("Alts", {})
+  local panel
+  Settings = {
+    RegisterCanvasLayoutCategory = function(p) panel = p return {} end,
+    RegisterAddOnCategory = function() end,
+  }
+  HK.Options.RegisterPanel()
+  panel.scripts.OnShow(panel)
+  local box, labeled
+  for _, f in ipairs(Stub.frames) do
+    if f.kind == "CheckButton" then box = f end
+    if f.text == "Alts" then labeled = true end
+  end
+  truthy(labeled, "no label with the module name")
+  eq(box:GetChecked(), true)
+  HK:DisableModule("Alts")
+  panel.scripts.OnShow(panel)
+  eq(box:GetChecked(), false)
+end)

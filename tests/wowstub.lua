@@ -23,6 +23,8 @@ function frameMethods.IsVisible(self) return self.shown end
 function frameMethods.SetShown(self, shown) self.shown = shown and true or false end
 function frameMethods.SetText(self, text) self.text = text end
 function frameMethods.GetText(self) return self.text end
+function frameMethods.SetChecked(self, checked) self.checked = checked and true or false end
+function frameMethods.GetChecked(self) return self.checked end
 
 local function noop() end
 

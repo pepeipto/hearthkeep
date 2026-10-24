@@ -46,6 +46,61 @@ local function addProfession(list, name, skill, maxSkill, id)
   list[#list + 1] = { id = id, name = name, skill = skill, maxSkill = maxSkill }
 end
 
+local function skillLineCount()
+  local ok, count = pcall(GetNumSkillLines)
+  if not ok then
+    fail("GetNumSkillLines", count)
+    return nil
+  end
+  return count
+end
+
+local function skillLine(index)
+  local info = pack(pcall(GetSkillLineInfo, index))
+  if not info[1] then
+    fail("GetSkillLineInfo", info[2])
+    return nil
+  end
+  return info
+end
+
+-- The classic skill list only enumerates lines under expanded headers, so a
+-- collapsed "Professions" header would hide every profession. Expand what is
+-- collapsed, and report the headers that really revealed lines so they can be
+-- collapsed again afterwards.
+local function expandCollapsedHeaders()
+  local expanded = {}
+  if not (Compat.Has("ExpandSkillHeader") and Compat.Has("CollapseSkillHeader")) then
+    return expanded
+  end
+  local count = skillLineCount() or 0
+  local i = 1
+  while i <= count do
+    local info = skillLine(i)
+    if info and info[3] and not info[4] and pcall(ExpandSkillHeader, i) then
+      local newCount = skillLineCount()
+      if newCount and newCount > count then
+        expanded[#expanded + 1] = info[2]
+        count = newCount
+      end
+    end
+    i = i + 1
+  end
+  return expanded
+end
+
+local function restoreCollapsedHeaders(names)
+  for n = #names, 1, -1 do
+    for i = 1, skillLineCount() or 0 do
+      local info = skillLine(i)
+      if info and info[3] and info[2] == names[n] then
+        pcall(CollapseSkillHeader, i)
+        break
+      end
+    end
+  end
+end
+
 function Compat.GetProfessions()
   if Compat.Has("GetProfessions") and Compat.Has("GetProfessionInfo") then
     local indexes = pack(pcall(GetProfessions))
@@ -67,24 +122,21 @@ function Compat.GetProfessions()
     return list
   end
   if Compat.Has("GetNumSkillLines") and Compat.Has("GetSkillLineInfo") then
-    local ok, count = pcall(GetNumSkillLines)
-    if not ok then
-      fail("GetNumSkillLines", count)
-      return nil, "GetNumSkillLines failed"
-    end
+    local expanded = expandCollapsedHeaders()
+    local count = skillLineCount()
+    if not count then return nil, "GetNumSkillLines failed" end
     local list, inProfessions = {}, false
     for i = 1, count do
-      local info = pack(pcall(GetSkillLineInfo, i))
-      if info[1] then
+      local info = skillLine(i)
+      if info then
         if info[3] then
           inProfessions = PROFESSION_HEADERS[info[2]] == true
         elseif inProfessions then
           addProfession(list, info[2], info[5], info[8], nil)
         end
-      else
-        fail("GetSkillLineInfo", info[2])
       end
     end
+    restoreCollapsedHeaders(expanded)
     return list
   end
   return nil, "no profession API"
@@ -139,6 +191,7 @@ function Compat.IsSpellKnown(spellID)
     fail("IsSpellKnown", known)
     return false
   end
+  if Compat.IsSecret(known) then return false end
   return known == true
 end
 

@@ -238,7 +238,6 @@ end
 
 local function createFrame()
   local frame = CreateFrame("Frame", "HearthkeepAltsWindow", UIParent)
-  Window.frame = frame
   frame:SetSize(620, 56 + VISIBLE_ROWS * ROW_HEIGHT + 34)
   frame:SetPoint("CENTER")
   frame:SetFrameStrata("MEDIUM")
@@ -299,12 +298,19 @@ local function createFrame()
     if point then HK.db.ui.pos = { point, relativePoint, x, y } end
   end)
   local pos = HK.db.ui.pos
-  if pos then
-    frame:ClearAllPoints()
-    frame:SetPoint(pos[1], UIParent, pos[2], pos[3], pos[4])
+  if type(pos) == "table" then
+    local restored = pcall(function()
+      frame:ClearAllPoints()
+      frame:SetPoint(pos[1], UIParent, pos[2], pos[3], pos[4])
+    end)
+    if not restored then
+      frame:ClearAllPoints()
+      frame:SetPoint("CENTER")
+    end
   end
   if UISpecialFrames then table.insert(UISpecialFrames, "HearthkeepAltsWindow") end
   frame:Hide()
+  Window.frame = frame
   return frame
 end
 

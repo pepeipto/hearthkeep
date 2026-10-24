@@ -123,3 +123,44 @@ test("Probe lists the APIs with a present flag", function()
   eq(found["GetMoney"], true)
   eq(found["GetProfessions"], false)
 end)
+
+test("GetProfessions expands collapsed skill headers and restores them", function()
+  local HK = Stub.load("Hearthkeep")
+  local groups = {
+    { name = "Professions", expanded = false, children = { { name = "Alchemy", skill = 225, max = 300 } } },
+    { name = "Weapon Skills", expanded = true, children = { { name = "Swords", skill = 100, max = 300 } } },
+  }
+  local function visible()
+    local list = {}
+    for _, group in ipairs(groups) do
+      list[#list + 1] = { header = true, group = group }
+      if group.expanded then
+        for _, child in ipairs(group.children) do list[#list + 1] = { child = child } end
+      end
+    end
+    return list
+  end
+  GetNumSkillLines = function() return #visible() end
+  GetSkillLineInfo = function(i)
+    local line = visible()[i]
+    if line.header then return line.group.name, true, line.group.expanded end
+    return line.child.name, false, nil, line.child.skill, nil, nil, line.child.max
+  end
+  ExpandSkillHeader = function(i) visible()[i].group.expanded = true end
+  CollapseSkillHeader = function(i) visible()[i].group.expanded = false end
+  eq(HK.Compat.GetProfessions(), { { name = "Alchemy", skill = 225, maxSkill = 300 } })
+  eq(groups[1].expanded, false)
+  eq(groups[2].expanded, true)
+end)
+
+test("IsSpellKnown guards the returned value against secrets", function()
+  local HK = Stub.load("Hearthkeep")
+  local checked = 0
+  issecretvalue = function(v)
+    checked = checked + 1
+    return v == SECRET
+  end
+  IsPlayerSpell = function() return SECRET end
+  eq(HK.Compat.IsSpellKnown(1), false)
+  truthy(checked >= 1)
+end)
