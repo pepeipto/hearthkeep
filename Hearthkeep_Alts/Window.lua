@@ -10,9 +10,9 @@ local DASH = "—"
 
 local COLUMNS = {
   { field = "nameText", label = "COL_NAME", sort = "name", x = 12, width = 130 },
-  { field = "levelText", label = "COL_LEVEL", sort = "level", x = 146, width = 40 },
-  { field = "moneyText", label = "COL_GOLD", sort = "money", x = 190, width = 120 },
-  { field = "professionsText", label = "COL_PROFESSIONS", x = 314, width = 190 },
+  { field = "levelText", label = "COL_LEVEL", sort = "level", x = 146, width = 60 },
+  { field = "moneyText", label = "COL_GOLD", sort = "money", x = 210, width = 120 },
+  { field = "professionsText", label = "COL_PROFESSIONS", x = 334, width = 170 },
   { field = "cooldownText", label = "COL_COOLDOWNS", x = 508, width = 90 },
 }
 
@@ -46,7 +46,8 @@ end
 
 local function cooldownText(record)
   if not record.cooldowns or #record.cooldowns == 0 then return DASH end
-  return Alts.Query.ReadyCount(record, GetServerTime()) .. " " .. HK.L.READY
+  local ready = Alts.Query.ReadyCount(record, GetServerTime())
+  return ready .. " " .. (ready == 1 and HK.L.READY_ONE or HK.L.READY)
 end
 
 function Window.FormatDuration(seconds)
@@ -83,6 +84,7 @@ local function label(parent, x, y, width, justify)
   local fs = parent:CreateFontString(nil, "OVERLAY", "GameFontNormal")
   fs:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
   fs:SetWidth(width)
+  fs:SetWordWrap(false)
   fs:SetJustifyH(justify or "LEFT")
   return fs
 end

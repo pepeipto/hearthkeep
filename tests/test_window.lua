@@ -57,6 +57,15 @@ test("cooldownText is Spanish on an esES client", function()
   eq(Alts.Window.BuildRows({})[1].cooldownText, "2 listos")
 end)
 
+test("cooldownText uses the singular for one ready cooldown", function()
+  Stub.locale = "esES"
+  local _, Alts = setup()
+  save(Alts, "a", { name = "Alice", cooldowns = { { readyAt = 0 }, { readyAt = Stub.now + 100 } } })
+  eq(Alts.Window.BuildRows({})[1].cooldownText, "1 listo")
+  Stub.locale = "enUS"
+  eq(Alts.Window.BuildRows({})[1].cooldownText, "1 ready")
+end)
+
 test("level and money text", function()
   local _, Alts = setup()
   save(Alts, "a", { name = "Alice", level = 60, money = 12345678 })

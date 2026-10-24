@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hearthkeep Alts - design mockup</title>
+<style>
+  :root { color-scheme: dark; --bg: #14161a; --text: #e8e8e8; --muted: #9aa0a6; --gold: #ffd100; --panel: rgba(0,0,0,.88); --line: #3a3d44; --warn: #ff8a3d; }
+  body { margin: 0; padding: 24px 16px 48px; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, sans-serif; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 15px; margin: 32px 0 2px; }
+  .lead, .caption { color: var(--muted); margin: 0 0 10px; max-width: 640px; }
+  .banner { display: inline-block; margin-bottom: 8px; padding: 3px 10px; border: 1px solid var(--warn); color: var(--warn); font-size: 12px; letter-spacing: .02em; }
+  .win { width: 620px; max-width: 100%; box-sizing: border-box; background: var(--panel); border: 1px solid var(--line); padding: 10px 12px 12px; font-size: 13px; }
+  .bar { display: flex; justify-content: space-between; margin-bottom: 8px; }
+  .title { color: var(--gold); font-size: 16px; }
+  .realm { color: #fff; }
+  .row { display: grid; grid-template-columns: 134px 64px 124px 174px 90px; gap: 0; padding: 2px 0; }
+  .row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .head { color: var(--gold); border-bottom: 1px solid var(--line); margin-bottom: 4px; padding-bottom: 4px; }
+  .empty { color: #fff; text-align: center; padding: 56px 0; }
+  .foot { color: var(--gold); margin-top: 10px; border-top: 1px solid var(--line); padding-top: 8px; }
+  @media (max-width: 660px) { .win { overflow-x: auto; } .row { min-width: 590px; } }
+</style>
+</head>
+<body>
+<h1>Hearthkeep Alts</h1>
+<p class="lead">Design mockup of the Alts window. The text in every row comes from the addon's own row builder, drawn here in a browser with test characters. These are not in-game screenshots and must not be published as if they were.</p>
+<section><h2>Populated</h2><p class="caption">Five test characters, sorted by level (highest first), all realms.</p>
+<div class="banner">DESIGN MOCKUP - not an in-game screenshot</div>
+<div class="win">
+<div class="bar"><span class="title">Hearthkeep</span><span class="realm">All realms</span></div>
+<div class="row head"><span>Name</span><span>Level v</span><span>Gold</span><span>Professions</span><span>Cooldowns</span></div>
+<div class="row"><span><span style="color:#c79c6e">Thornwick</span></span><span>60</span><span>1234g 56s 78c</span><span>Mining 300/300, Blacksmithing 285/300</span><span>1 ready</span></div>
+<div class="row"><span><span style="color:#69ccf0">Mirelle</span></span><span>54</span><span>402g 19s</span><span>Tailoring 240/300, Enchanting 190/225</span><span>2 ready</span></div>
+<div class="row"><span><span style="color:#fff569">Grubb</span></span><span>42</span><span>90g 55s</span><span>Skinning 150/225</span><span>—</span></div>
+<div class="row"><span><span style="color:#ffffff">Sunna</span></span><span>31</span><span>13g 20c</span><span>—</span><span>—</span></div>
+<div class="row"><span><span style="color:#9482c9">Vexa</span></span><span>19</span><span>88s</span><span>—</span><span>—</span></div>
+<div class="foot">Total gold: 1741g 18s 98c</div>
+</div></section>
+<section><h2>Filtered by realm</h2><p class="caption">The realm button cycled to one realm; the footer total follows the filter.</p>
+<div class="banner">DESIGN MOCKUP - not an in-game screenshot</div>
+<div class="win">
+<div class="bar"><span class="title">Hearthkeep</span><span class="realm">Duskhollow</span></div>
+<div class="row head"><span>Name</span><span>Level v</span><span>Gold</span><span>Professions</span><span>Cooldowns</span></div>
+<div class="row"><span><span style="color:#fff569">Grubb</span></span><span>42</span><span>90g 55s</span><span>Skinning 150/225</span><span>—</span></div>
+<div class="row"><span><span style="color:#ffffff">Sunna</span></span><span>31</span><span>13g 20c</span><span>—</span><span>—</span></div>
+<div class="foot">Total gold: 103g 55s 20c</div>
+</div></section>
+<section><h2>Empty state</h2><p class="caption">Shown before any character has been saved.</p>
+<div class="banner">DESIGN MOCKUP - not an in-game screenshot</div>
+<div class="win">
+<div class="bar"><span class="title">Hearthkeep</span><span class="realm">All realms</span></div>
+<div class="row head"><span>Name</span><span>Level v</span><span>Gold</span><span>Professions</span><span>Cooldowns</span></div>
+<div class="empty">No characters saved yet.</div>
+<div class="foot">Total gold: 0c</div>
+</div></section>
+<section><h2>Spanish client</h2><p class="caption">The same data on an esES client.</p>
+<div class="banner">DESIGN MOCKUP - not an in-game screenshot</div>
+<div class="win">
+<div class="bar"><span class="title">Hearthkeep</span><span class="realm">Todos los reinos</span></div>
+<div class="row head"><span>Nombre</span><span>Nivel v</span><span>Oro</span><span>Profesiones</span><span>Cooldowns</span></div>
+<div class="row"><span><span style="color:#c79c6e">Thornwick</span></span><span>60</span><span>1234g 56s 78c</span><span>Mining 300/300, Blacksmithing 285/300</span><span>1 listo</span></div>
+<div class="row"><span><span style="color:#69ccf0">Mirelle</span></span><span>54</span><span>402g 19s</span><span>Tailoring 240/300, Enchanting 190/225</span><span>2 listos</span></div>
+<div class="row"><span><span style="color:#fff569">Grubb</span></span><span>42</span><span>90g 55s</span><span>Skinning 150/225</span><span>—</span></div>
+<div class="row"><span><span style="color:#ffffff">Sunna</span></span><span>31</span><span>13g 20c</span><span>—</span><span>—</span></div>
+<div class="row"><span><span style="color:#9482c9">Vexa</span></span><span>19</span><span>88s</span><span>—</span><span>—</span></div>
+<div class="foot">Oro total: 1741g 18s 98c</div>
+</div></section>
+</body>
+</html>

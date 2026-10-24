@@ -34,6 +34,7 @@ Locale.Register("enUS", {
   DELETE = "Delete",
   ALL_REALMS = "All realms",
   READY = "ready",
+  READY_ONE = "ready",
   HELP = "Commands: /hk (open), /hk modules, /hk enable <module>, /hk disable <module>, /hk debug",
 })
 
@@ -50,5 +51,6 @@ Locale.Register("esES", {
   DELETE = "Borrar",
   ALL_REALMS = "Todos los reinos",
   READY = "listos",
+  READY_ONE = "listo",
   HELP = "Comandos: /hk (abrir), /hk modules, /hk enable <módulo>, /hk disable <módulo>, /hk debug",
 })

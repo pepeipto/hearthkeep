@@ -45,5 +45,7 @@ Everything in this project has been tested offline against a simulated game API.
 - [ ] Build `dist/Hearthkeep-<version>.zip` with `powershell -File scripts/build.ps1` and confirm it contains both `Hearthkeep/` and `Hearthkeep_Alts/`.
 - [ ] Check whether the CurseForge packager accepts this two-folder layout with `.pkgmeta` (a dry run). If not, upload the zip from `build.ps1`.
 - [ ] Fill `## X-Curse-Project-ID` in the core TOC once the project exists.
-- [ ] Capture every screenshot and the video in `docs/media/shot-list.md` from the real client, using test characters. Check that no real account data is visible.
+- [ ] Capture every screenshot in `docs/media/shot-list.md` from the real client, using test characters. Check that no real account data is visible.
+- [ ] Record the demo video following `docs/media/video-storyboard.md`, then review it frame by frame and remove any scene that did not work as described.
+- [ ] Do not publish the files in `docs/media/mockups/` as screenshots; they are design mockups.
 - [ ] Fill in `docs/curseforge-listing.md` with what was actually tested, and remove anything that was not verified.
