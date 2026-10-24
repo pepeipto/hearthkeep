@@ -1,0 +1,8 @@
+## Interface: 16001
+## Title: Hearthkeep
+## Notes: Modular utilities for your characters.
+## Author: Carlos Fernandez Medina
+## Version: 0.1.0
+## SavedVariables: HearthkeepDB
+
+Core.lua
