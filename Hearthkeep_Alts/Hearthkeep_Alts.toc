@@ -8,3 +8,5 @@
 Format.lua
 Store.lua
 Query.lua
+Capture.lua
+Alts.lua
