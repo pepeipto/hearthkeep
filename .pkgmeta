@@ -1,0 +1,8 @@
+package-as: Hearthkeep
+
+ignore:
+  - docs
+  - tests
+  - scripts
+  - dist
+  - README.md

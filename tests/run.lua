@@ -1,5 +1,5 @@
 -- Plain-Lua test runner. Run from the repo root: luajit tests/run.lua
-local FILES = { "test_core", "test_storage", "test_compat", "test_options", "test_alts_data", "test_capture", "test_window" }
+local FILES = { "test_core", "test_storage", "test_compat", "test_options", "test_alts_data", "test_capture", "test_window", "test_toc" }
 local out = print
 
 Stub = dofile("tests/wowstub.lua")
@@ -22,8 +22,12 @@ function eq(actual, expected)
     error("expected " .. show(expected) .. ", got " .. show(actual), 2)
   end
 end
-function truthy(v) if not v then error("expected a truthy value, got " .. show(v), 2) end end
-function falsy(v) if v then error("expected a falsy value, got " .. show(v), 2) end end
+function truthy(v, msg)
+  if not v then error((msg or "expected a truthy value") .. ", got " .. show(v), 2) end
+end
+function falsy(v, msg)
+  if v then error((msg or "expected a falsy value") .. ", got " .. show(v), 2) end
+end
 function throws(fn)
   if pcall(fn) then error("expected the function to raise an error", 2) end
 end
