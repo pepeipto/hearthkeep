@@ -505,3 +505,19 @@ game by an addon manager or by our own installer.
 
 Updating without the player doing anything outside the game, and any hidden network
 or telemetry. Both are impossible from an addon or against the project's principles.
+
+## 21. Default language: English (supersedes the "follows the client" default in 19.2)
+
+Decided by the user: English is the default language, because the English-speaking
+community is by far the largest.
+
+- A fresh install uses English (enUS) for everyone, whatever the client language.
+- Step 1 of the setup assistant (19.2) shows English preselected. Spanish and German
+  are one click away, and the choice can be changed later in the options panel.
+- My call: when the client language is esES, esMX or deDE, the assistant adds one quiet
+  line in that language offering to switch. It does not switch by itself.
+- Missing strings in any language still fall back to English (15.1).
+- The CurseForge description, the website, the Discord announcements and the
+  documentation are written in English first, with Spanish and German after it.
+- English text is the reference for translators: a change to a string is made in
+  English first and the other languages are updated from it.
