@@ -10,4 +10,5 @@ Locale.lua
 Storage.lua
 Diagnostics.lua
 Compat.lua
+AddonCtl.lua
 Options.lua

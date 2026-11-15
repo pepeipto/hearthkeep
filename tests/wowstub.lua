@@ -79,6 +79,56 @@ function Stub.flushTimers()
   timers = {}
 end
 
+-- Addon-management stub. list = { {folder=, enabled=, loaded=}, ... }.
+-- opts.legacy exposes only the pre-C_AddOns globals (note the swapped argument
+-- order of GetAddOnEnableState).
+function Stub.setAddons(list, opts)
+  local byName, order = {}, {}
+  for i, entry in ipairs(list) do
+    local copy = { folder = entry.folder, enabled = entry.enabled and true or false,
+      loaded = entry.loaded and true or false }
+    byName[copy.folder] = copy
+    order[i] = copy
+  end
+  Stub.addons = byName
+  local function info(key)
+    local entry = type(key) == "number" and order[key] or byName[key]
+    if not entry then return nil end
+    return entry.folder, entry.folder, "", true, "", "INSECURE"
+  end
+  local function state(name)
+    local entry = byName[name]
+    return (entry and entry.enabled) and 2 or 0
+  end
+  local function set(name, on)
+    local entry = byName[name]
+    if entry then entry.enabled = on end
+    Stub.enableCalls[#Stub.enableCalls + 1] = { folder = name, enabled = on }
+  end
+  local function loaded(name)
+    local entry = byName[name]
+    return entry ~= nil and entry.loaded
+  end
+  local function count() return #order end
+  if opts and opts.legacy then
+    GetNumAddOns = count
+    GetAddOnInfo = info
+    GetAddOnEnableState = function(_, name) return state(name) end
+    EnableAddOn = function(name) set(name, true) end
+    DisableAddOn = function(name) set(name, false) end
+    IsAddOnLoaded = loaded
+  else
+    C_AddOns = {
+      GetNumAddOns = count,
+      GetAddOnInfo = info,
+      GetAddOnEnableState = function(name) return state(name) end,
+      EnableAddOn = function(name) set(name, true) end,
+      DisableAddOn = function(name) set(name, false) end,
+      IsAddOnLoaded = loaded,
+    }
+  end
+end
+
 function Stub.snapshotGlobals()
   baseGlobals = {}
   for k in pairs(_G) do baseGlobals[k] = true end
@@ -108,6 +158,12 @@ function Stub.reset()
   GetServerTime = function() return Stub.now end
   GetTime = function() return Stub.time end
   GetLocale = function() return Stub.locale end
+  Stub.addons = nil
+  Stub.reloads = 0
+  Stub.inCombat = false
+  Stub.enableCalls = {}
+  ReloadUI = function() Stub.reloads = Stub.reloads + 1 end
+  InCombatLockdown = function() return Stub.inCombat and 1 or nil end
   SlashCmdList = {}
   Stub.errors = {}
   geterrorhandler = function()
