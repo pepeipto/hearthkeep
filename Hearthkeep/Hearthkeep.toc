@@ -11,4 +11,5 @@ Storage.lua
 Diagnostics.lua
 Compat.lua
 AddonCtl.lua
+Manifest.lua
 Options.lua
