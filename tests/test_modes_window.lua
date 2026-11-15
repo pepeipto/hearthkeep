@@ -219,3 +219,43 @@ test("every manifest name and purpose key exists in all three languages", functi
     for key in pairs(keys) do truthy(HK.L[key] ~= key, key .. " missing in " .. code) end
   end
 end)
+
+test("only keepable rows have an enabled checkbox and clicking another repaints it", function()
+  local _, Modes = setup()
+  Modes.Window.Open({ "quests" })
+  local calls, checked = {}, {}
+  for i, row in ipairs(Modes.Window.widgets) do
+    row.check.Enable = function() calls[i] = "enable" end
+    row.check.Disable = function() calls[i] = "disable" end
+    row.check.SetChecked = function(_, value) checked[i] = value end
+  end
+  Modes.Window.Refresh()
+  eq(calls[2], "disable")
+  eq(calls[3], "disable")
+  eq(calls[5], "enable")
+  checked[2] = false
+  Modes.Window.widgets[2].check.scripts.OnClick(Modes.Window.widgets[2].check)
+  eq(checked[2], true)
+end)
+
+test("PLAYER_REGEN_DISABLED marks combat even while InCombatLockdown is still false", function()
+  local _, Modes = setup()
+  Modes.Window.Open({ "quests" })
+  Stub.fire("PLAYER_REGEN_DISABLED")
+  local ok, reason = Modes.Window.CanAccept()
+  eq(ok, false)
+  eq(reason, "combat")
+  Modes.Window.Accept()
+  eq(#Stub.enableCalls, 0)
+  Stub.fire("PLAYER_REGEN_ENABLED")
+  eq(Modes.Window.CanAccept(), true)
+end)
+
+test("CanAccept is unavailable when an enable state cannot be read", function()
+  local _, Modes = setup()
+  Modes.Window.Open({ "quests" })
+  C_AddOns.GetAddOnEnableState = function() error("bad") end
+  local ok, reason = Modes.Window.CanAccept()
+  eq(ok, false)
+  eq(reason, "unavailable")
+end)

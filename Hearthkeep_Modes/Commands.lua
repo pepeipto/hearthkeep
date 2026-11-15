@@ -8,7 +8,10 @@ HK:RegisterModule("Modes", {
 })
 
 for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
-  HK:RegisterEvent(event, function() Modes.Window.Refresh() end, "Modes")
+  HK:RegisterEvent(event, function(name)
+    Modes.Window.inCombatEvent = name == "PLAYER_REGEN_DISABLED"
+    Modes.Window.Refresh()
+  end, "Modes")
 end
 
 -- /hk mode            toggle the window

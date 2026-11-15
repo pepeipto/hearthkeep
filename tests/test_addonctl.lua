@@ -70,3 +70,53 @@ test("Reload calls ReloadUI, and does nothing when ReloadUI is missing", functio
   HK.AddonCtl.Reload()
   eq(Stub.reloads, 1)
 end)
+
+test("an echoing GetAddOnInfo with reason MISSING is not installed", function()
+  local HK = Stub.load("Hearthkeep")
+  Stub.setAddons(TWO, { echo = true })
+  eq(HK.AddonCtl.Info("Nope"), { installed = false, enabled = false, loaded = false })
+  eq(HK.AddonCtl.SetEnabled("Nope", true), false)
+  eq(#Stub.enableCalls, 0)
+  eq(HK.AddonCtl.Info("Questie").installed, true)
+end)
+
+test("DoesAddOnExist is preferred when the client has it", function()
+  local HK = Stub.load("Hearthkeep")
+  Stub.setAddons(TWO)
+  C_AddOns.DoesAddOnExist = function(name) return name == "Questie" end
+  eq(HK.AddonCtl.Info("Questie").installed, true)
+  eq(HK.AddonCtl.Info("Details").installed, false)
+end)
+
+test("an unreadable enable state is flagged unknown and reported", function()
+  local HK = Stub.load("Hearthkeep")
+  Stub.setAddons(TWO)
+  C_AddOns.GetAddOnEnableState = function() error("bad") end
+  eq(HK.AddonCtl.Info("Questie").unknown, true)
+  eq(HK.Diag.Last("AddonCtl")[1].field, "Questie")
+end)
+
+test("SetEnabled treats a silently ignored call as a failure", function()
+  local HK = Stub.load("Hearthkeep")
+  Stub.setAddons(TWO)
+  C_AddOns.EnableAddOn = function() end
+  eq(HK.AddonCtl.SetEnabled("Details", true), false)
+  eq(HK.Diag.Last("AddonCtl")[1].field, "Details")
+end)
+
+test("Reload saves addons first and returns false when ReloadUI raises", function()
+  local HK = Stub.load("Hearthkeep")
+  local order = {}
+  SaveAddOns = function() order[#order + 1] = "save" end
+  ReloadUI = function() order[#order + 1] = "reload" end
+  eq(HK.AddonCtl.Reload(), true)
+  eq(order, { "save", "reload" })
+  ReloadUI = function() error("blocked") end
+  eq(HK.AddonCtl.Reload(), false)
+end)
+
+test("InCombat is true when UnitAffectingCombat says so even if the lockdown is off", function()
+  local HK = Stub.load("Hearthkeep")
+  UnitAffectingCombat = function() return true end
+  eq(HK.AddonCtl.InCombat(), true)
+end)

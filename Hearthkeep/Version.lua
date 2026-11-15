@@ -6,6 +6,7 @@ local Version = {}
 HK.Version = Version
 
 local PREFIX = "Hearthkeep"
+local printedThisSession = {}
 
 function Version.Parse(text)
   if type(text) ~= "string" then return nil end
@@ -43,8 +44,10 @@ function Version.Handle(_, text)
   local current = Version.Current()
   if not (seen and current and HK.db) then return end
   if Version.Compare(seen, current) ~= 1 then return end
-  local latest = HK.db.settings.latestSeen
-  if Version.Parse(latest) and Version.Compare(seen, latest) ~= 1 then return end
+  -- Never compare with latestSeen as "newer than": a forged huge version would then
+  -- silence every real notice. Equality and a per-session set only stop repeats.
+  if text == HK.db.settings.latestSeen or printedThisSession[text] then return end
+  printedThisSession[text] = true
   HK.db.settings.latestSeen = text
   print("Hearthkeep: " .. string.format(HK.L.UPDATE_AVAILABLE, text))
 end

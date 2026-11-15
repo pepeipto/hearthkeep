@@ -93,6 +93,10 @@ function Stub.setAddons(list, opts)
   Stub.addons = byName
   local function info(key)
     local entry = type(key) == "number" and order[key] or byName[key]
+    -- opts.echo: some clients echo an unknown name back with reason "MISSING".
+    if not entry and opts and opts.echo and type(key) == "string" then
+      return key, key, "", false, "MISSING", "INSECURE"
+    end
     if not entry then return nil end
     return entry.folder, entry.folder, "", true, "", "INSECURE"
   end

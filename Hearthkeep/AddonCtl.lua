@@ -42,11 +42,23 @@ function AddonCtl.Info(folder)
   local result = { installed = false, enabled = false, loaded = false }
   local info = pick("GetAddOnInfo")
   if not info then return result end
-  local ok, name = pcall(info, folder)
-  if not (ok and type(name) == "string") then return result end
+  -- Prefer an explicit existence check: some clients echo an unknown name back from
+  -- GetAddOnInfo with reason "MISSING".
+  local exists = modern("DoesAddOnExist")
+  if exists then
+    local okExists, present = pcall(exists, folder)
+    if okExists and not present then return result end
+  end
+  local ok, name, _, _, _, reason = pcall(info, folder)
+  if not (ok and type(name) == "string") or reason == "MISSING" then return result end
   result.installed = true
   local okState, state = enableState(folder)
-  result.enabled = okState and type(state) == "number" and state > 0 or false
+  if okState and type(state) == "number" then
+    result.enabled = state > 0
+  else
+    result.unknown = true
+    HK.Diag.Record("AddonCtl", folder, "cannot read the enable state")
+  end
   local isLoaded = pick("IsAddOnLoaded")
   if isLoaded then
     local okLoaded, loaded = pcall(isLoaded, folder)
@@ -63,6 +75,12 @@ function AddonCtl.SetEnabled(folder, enabled)
     HK.Diag.Record("AddonCtl", folder, err)
     return false
   end
+  -- Verify: a client that silently ignores the call must not count as a success.
+  local after = AddonCtl.Info(folder)
+  if after.unknown or after.enabled ~= enabled then
+    HK.Diag.Record("AddonCtl", folder, "the enable state did not change")
+    return false
+  end
   return true
 end
 
@@ -70,11 +88,21 @@ function AddonCtl.CanReload()
   return type(_G.ReloadUI) == "function"
 end
 
+-- Saves the addon list first when the client has SaveAddOns, then reloads. Returns false
+-- when the reload is unavailable or raises, so the caller can ask for a manual /reload.
 function AddonCtl.Reload()
-  if AddonCtl.CanReload() then _G.ReloadUI() end
+  if not AddonCtl.CanReload() then return false end
+  local save = modern("SaveAddOns") or legacy("SaveAddOns")
+  if save then pcall(save) end
+  local ok = pcall(_G.ReloadUI)
+  return ok
 end
 
 function AddonCtl.InCombat()
-  if type(_G.InCombatLockdown) ~= "function" then return false end
-  return _G.InCombatLockdown() and true or false
+  if type(_G.InCombatLockdown) == "function" and _G.InCombatLockdown() then return true end
+  if type(_G.UnitAffectingCombat) == "function" then
+    local ok, affecting = pcall(_G.UnitAffectingCombat, "player")
+    return ok and affecting and true or false
+  end
+  return false
 end

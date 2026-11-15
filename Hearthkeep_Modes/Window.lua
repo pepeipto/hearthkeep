@@ -13,6 +13,8 @@ Window.lastState = { canAccept = false }
 
 local ROW_HEIGHT = 22
 local widgets, modeButtons = {}, {}
+Window.widgets = widgets
+Window.inCombatEvent = false
 local REASONS = { combat = "REASON_COMBAT", unavailable = "REASON_UNAVAILABLE", nochange = "REASON_NOCHANGE" }
 
 local function say(text) print("Hearthkeep: " .. text) end
@@ -102,9 +104,11 @@ function Window.Rows(plan)
 end
 
 function Window.CanAccept()
-  if HK.AddonCtl.InCombat() then return false, "combat" end
+  -- InCombatLockdown() can still be false while PLAYER_REGEN_DISABLED is handled.
+  if HK.AddonCtl.InCombat() or Window.inCombatEvent then return false, "combat" end
   if not HK.AddonCtl.Available() then return false, "unavailable" end
   local plan = Window.CurrentPlan()
+  if plan.unreadable then return false, "unavailable" end
   if plan.restore then
     if plan.nothing then return false, "nochange" end
     return true
@@ -139,7 +143,11 @@ local function buildRow(parent, index)
   row.check = newFrame("CheckButton", nil, row, "UICheckButtonTemplate")
   row.check:SetPoint("LEFT", row, "LEFT", 0, 0)
   row.check:SetScript("OnClick", function()
-    if row.keepable and row.folder then Window.ToggleKeep(row.folder) end
+    if row.keepable and row.folder then
+      Window.ToggleKeep(row.folder)
+    else
+      Window.Refresh() -- this row cannot be changed: put its tick back
+    end
   end)
   row.text = row:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
   row.text:SetPoint("LEFT", row, "LEFT", 28, 0)
@@ -242,6 +250,7 @@ local function paint()
           row.check:Show()
           row.check:SetChecked(data.checked)
           row.keepable = data.fromMode ~= nil
+          if row.keepable then row.check:Enable() else row.check:Disable() end
           row.purpose:SetText(data.purposeKey and L[data.purposeKey] or "")
         end
       end
@@ -309,6 +318,11 @@ function Window.ToggleKeep(folder)
 end
 
 function Window.Accept()
+  local can, why = Window.CanAccept()
+  if not can and why == "combat" then
+    say(HK.L.REASON_COMBAT)
+    return
+  end
   local ok, detail
   if #Window.selection == 0 then
     ok, detail = Engine.Restore()

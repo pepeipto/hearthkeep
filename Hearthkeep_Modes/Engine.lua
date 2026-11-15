@@ -35,13 +35,16 @@ function Engine.Plan(ids, keeps)
   local active = knownIds(ids)
   local plan = {
     ids = active, target = {}, on = {}, off = {}, keepable = {}, keep = {},
-    optional = {}, missing = {}, needsReload = false,
+    optional = {}, missing = {}, needsReload = false, unreadable = false,
   }
   if #active == 0 then return plan end
 
   local cache = {}
   local function info(folder)
-    if not cache[folder] then cache[folder] = HK.AddonCtl.Info(folder) end
+    if not cache[folder] then
+      cache[folder] = HK.AddonCtl.Info(folder)
+      if cache[folder].unknown then plan.unreadable = true end
+    end
     return cache[folder]
   end
 
@@ -142,14 +145,26 @@ local function finish(plan, failed)
   local changed = (#plan.on + #plan.off) - #failed > 0
   local info = { reload = "none", failed = failed }
   if not changed then return true, info end
-  if HK.AddonCtl.CanReload() then
+  if #failed > 0 then
+    -- Do not reload away the message that says what could not be changed.
+    info.reload = "held"
+    print("Hearthkeep: " .. HK.L.RELOAD_MANUAL)
+  elseif HK.AddonCtl.CanReload() and HK.AddonCtl.Reload() then
     info.reload = "done"
-    HK.AddonCtl.Reload()
   else
     info.reload = "manual"
     print("Hearthkeep: " .. HK.L.RELOAD_MANUAL)
   end
   return true, info
+end
+
+-- Folders first touched after the baseline was recorded join it before they change.
+local function extendBaseline(state, ...)
+  for _, list in ipairs({ ... }) do
+    for _, folder in ipairs(list) do
+      if state.baseline[folder] == nil then state.baseline[folder] = HK.AddonCtl.Info(folder).enabled end
+    end
+  end
 end
 
 local function refusal()
@@ -162,8 +177,10 @@ function Engine.Apply(plan)
   local reason = refusal()
   if reason then return false, reason end
   if #plan.ids == 0 then return false, "nochange" end
+  if plan.unreadable then return false, "unavailable" end
   local state = stateFor(true)
   recordBaseline(state)
+  extendBaseline(state, plan.on, plan.off)
   local failed = change(plan.on, plan.off)
   state.active = copyList(plan.ids)
   HK.db.modeKeeps[Engine.ComboKey(plan.ids)] = copyList(plan.keep)
@@ -172,7 +189,7 @@ end
 
 -- The plan that puts every managed addon back to the player's original state.
 function Engine.PlanRestore()
-  local plan = { ids = {}, restore = true, on = {}, off = {}, needsReload = false }
+  local plan = { ids = {}, restore = true, on = {}, off = {}, needsReload = false, unreadable = false }
   local state = stateFor(false)
   if not state or not state.baseline then
     plan.nothing = true
@@ -180,6 +197,7 @@ function Engine.PlanRestore()
   end
   for _, folder in ipairs(sortedFolders(state.baseline)) do
     local info = HK.AddonCtl.Info(folder)
+    if info.unknown then plan.unreadable = true end
     if info.installed then
       if state.baseline[folder] and not info.enabled then
         plan.on[#plan.on + 1] = folder
@@ -197,10 +215,13 @@ function Engine.Restore()
   if reason then return false, reason end
   local plan = Engine.PlanRestore()
   if plan.nothing then return false, "nochange" end
+  if plan.unreadable then return false, "unavailable" end
   local failed = change(plan.on, plan.off)
   local state = stateFor(true)
-  state.baseline = nil
-  state.active = {}
+  if #failed == 0 then
+    state.baseline = nil
+    state.active = {}
+  end
   return finish(plan, failed)
 end
 

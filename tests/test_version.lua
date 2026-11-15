@@ -143,3 +143,10 @@ test("login registers the prefix, announces after a delay and reports a missing 
   Stub.fire("PLAYER_LOGIN")
   truthy(table.concat(HK.Diag.Report(), "\n"):find("Version", 1, true))
 end)
+
+test("a forged huge version does not silence later real notices", function()
+  local HK = setup("0.2.0")
+  HK.Version.Handle("Mallory", "999.0.0")
+  HK.Version.Handle("Anna", "0.3.0")
+  eq(lines(), 2)
+end)

@@ -170,3 +170,74 @@ test("Status counts a kept addon as fine and a stray one as modified", function(
   Stub.addons["DBM-Core"].enabled = true
   eq(Engine.Status({ "quests" }), "modified")
 end)
+
+test("Apply refuses with unavailable when an enable state cannot be read", function()
+  local _, Engine = setup()
+  local plan
+  C_AddOns.GetAddOnEnableState = function() error("bad") end
+  plan = Engine.Plan({ "quests" })
+  local ok, reason = Engine.Apply(plan)
+  eq(ok, false)
+  eq(reason, "unavailable")
+  eq(#Stub.enableCalls, 0)
+end)
+
+test("a partial failure holds the reload and tells the player to reload", function()
+  local _, Engine = setup()
+  local original = C_AddOns.EnableAddOn
+  C_AddOns.EnableAddOn = function(name) if name == "Questie" then error("boom") end return original(name) end
+  local ok, info = Engine.Apply(Engine.Plan({ "quests" }))
+  eq(ok, true)
+  eq(info.reload, "held")
+  eq(Stub.reloads, 0)
+  truthy(table.concat(Stub.printed, "\n"):find("/reload", 1, true))
+end)
+
+test("Restore keeps the baseline when something fails and a second Restore finishes it", function()
+  local HK, Engine = setup()
+  Engine.Apply(Engine.Plan({ "quests" }))
+  local original = C_AddOns.DisableAddOn
+  C_AddOns.DisableAddOn = function(name) if name == "Questie" then error("boom") end return original(name) end
+  local ok, info = Engine.Restore()
+  eq(ok, true)
+  eq(info.failed, { "Questie" })
+  truthy(HK.db.modeState[HK.Storage.CharKey()].baseline)
+  C_AddOns.DisableAddOn = original
+  eq(Engine.Restore(), true)
+  eq(snapshot().Questie, false)
+  eq(HK.db.modeState[HK.Storage.CharKey()].baseline, nil)
+end)
+
+test("Restore also covers an addon that was not in the baseline when it was recorded", function()
+  local HK, Engine = setup()
+  Engine.Apply(Engine.Plan({ "raid" }))
+  Stub.addons.Newbie = { folder = "Newbie", enabled = true, loaded = false }
+  HK.db.modeEdits.world = { add = { "Newbie" }, remove = {} }
+  Engine.Apply(Engine.Plan({ "quests" }))
+  eq(snapshot().Newbie, false)
+  Engine.Restore()
+  eq(snapshot().Newbie, true)
+end)
+
+test("the baseline survives a reload between switches", function()
+  local HK, Engine = setup()
+  local original = snapshot()
+  Engine.Apply(Engine.Plan({ "raid" }))
+  HearthkeepDB = copy(HK.db)
+  HK.Storage.Load()
+  Engine.Apply(Engine.Plan({ "pvp" }))
+  HearthkeepDB = copy(HK.db)
+  HK.Storage.Load()
+  Engine.Apply(Engine.Plan({ "quests" }))
+  eq(Engine.Restore(), true)
+  eq(snapshot(), original)
+end)
+
+test("a ReloadUI that raises falls back to the manual message", function()
+  local _, Engine = setup()
+  ReloadUI = function() error("blocked") end
+  local ok, info = Engine.Apply(Engine.Plan({ "quests" }))
+  eq(ok, true)
+  eq(info.reload, "manual")
+  truthy(table.concat(Stub.printed, "\n"):find("/reload", 1, true))
+end)

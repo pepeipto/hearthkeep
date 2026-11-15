@@ -109,3 +109,17 @@ test("ComboKey sorts and joins", function()
   eq(Engine.ComboKey({ "world", "quests" }), "quests+world")
   eq(Engine.ComboKey({}), "")
 end)
+
+test("an unreadable enable state marks the plan unreadable", function()
+  local _, Engine = setup()
+  C_AddOns.GetAddOnEnableState = function() error("bad") end
+  eq(Engine.Plan({ "quests" }).unreadable, true)
+end)
+
+test("an echoing client still lists uninstalled addons as missing and never enables them", function()
+  local _, Engine = setup()
+  Stub.setAddons(BASE, { echo = true })
+  local plan = Engine.Plan({ "quests" })
+  eq(plan.missing[1].folder, "Leatrix_Maps")
+  eq(plan.on, { "Questie", "TomTom" })
+end)
