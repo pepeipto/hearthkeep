@@ -12,4 +12,5 @@ Diagnostics.lua
 Compat.lua
 AddonCtl.lua
 Manifest.lua
+Skins.lua
 Options.lua
