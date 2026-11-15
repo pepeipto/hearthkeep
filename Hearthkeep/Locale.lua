@@ -191,3 +191,28 @@ Locale.Register("deDE", {
   SKIN_MINIMAL = "Minimal", SKIN_FOLLOW = "Meiner UI folgen",
   MODE_HELP = "mode [id ...] | restore - Addons nach Aktivität wechseln",
 })
+
+-- Setup assistant (Task 10). Spanish and German need native review before release.
+Locale.Register("enUS", {
+  SETUP_TITLE = "Hearthkeep setup", SETUP_LANGUAGE = "Language", SETUP_LOOK = "Look",
+  SETUP_MODES = "What do you play?", SETUP_ADDONS = "Addons",
+  SETUP_ADDONS_TEXT = "Next you will see the addons for your modes. Nothing changes until you accept.",
+  SKIP = "Skip", NEXT = "Next", FINISH = "Finish",
+  SETUP_HELP = "setup - open the setup assistant again",
+})
+
+Locale.Register("esES", {
+  SETUP_TITLE = "Configuración de Hearthkeep", SETUP_LANGUAGE = "Idioma", SETUP_LOOK = "Aspecto",
+  SETUP_MODES = "¿Qué juegas?", SETUP_ADDONS = "Addons",
+  SETUP_ADDONS_TEXT = "A continuación verás los addons de tus modos. No cambia nada hasta que aceptes.",
+  SKIP = "Saltar", NEXT = "Siguiente", FINISH = "Terminar",
+  SETUP_HELP = "setup - abre otra vez el asistente de configuración",
+})
+
+Locale.Register("deDE", {
+  SETUP_TITLE = "Hearthkeep-Einrichtung", SETUP_LANGUAGE = "Sprache", SETUP_LOOK = "Design",
+  SETUP_MODES = "Was spielst du?", SETUP_ADDONS = "Addons",
+  SETUP_ADDONS_TEXT = "Als Nächstes siehst du die Addons deiner Modi. Nichts ändert sich, bis du bestätigst.",
+  SKIP = "Überspringen", NEXT = "Weiter", FINISH = "Fertig",
+  SETUP_HELP = "setup - Einrichtungsassistent erneut öffnen",
+})
