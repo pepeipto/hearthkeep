@@ -246,3 +246,78 @@ checking Forever releases), which adapters ship, wording of messages.
 8. **Profiles.** A profile name in the manifest is a request: if the addon has no
    profile with that name, Hearthkeep skips it and says so; it never creates
    profiles.
+
+## 14. Visual design and skins
+
+Requested by the user: a visual structure that does not weigh on the system, fits the
+game's UI, and lets the player pick among several UI skins. Everything below the
+requirements is the author's proposal.
+
+### 14.1 Weight rules
+
+- Nothing is built until first used. The mode window is created the first time it is
+  opened, then hidden and reused, never rebuilt.
+- No `OnUpdate` scripts anywhere. The UI reacts to events and clicks only. Idle cost
+  of the Modes feature is zero.
+- The addon list is a recycled row pool (about 12 visible rows, reused when
+  scrolling), not one frame per addon.
+- The missing-addons list is a collapsible section of the same window, not a second
+  window.
+- No external libraries and no image files in v1. Skins use the game's own textures,
+  flat colors and game fonts, so the zip stays tiny.
+- `/hk debug` reports the memory used by each module when the game offers it
+  (feature-detected). Weight targets are measured, not assumed.
+
+### 14.2 Window layout
+
+One window, one fixed width, height capped with a scroll area. Sketch:
+
+```
++-- Hearthkeep - Modes -------------------- [x] --+
+| [Raid] [Dungeons] [PvP] [Quests] [Open World]   |
+|-- Raid addons (on by default) ------------------|
+| [x] Deadly Boss Mods              boss timers   |
+| [x] Details!                      damage meter  |
+|-- From other modes (turn off unless ticked) ----|
+| [ ] Questie                       Quests        |
+|-- Not installed (search in your manager) [v] ---|
+|  Raider.IO        BigWigs                       |
+|                                                 |
+| Skin: [ Blizzard v ]          [ Accept change ] |
++-------------------------------------------------+
+```
+
+- The mode buttons at the top choose the target mode; the list updates in place.
+- Opened by `/hk mode`, the minimap button menu, and a button in the Alts window.
+- Usable in combat to look at; "Accept change" is disabled in combat with the reason.
+
+### 14.3 Skins
+
+A skin is plain data, not code: backdrop textures and insets, colors (background,
+border, header, text, accent, tick), font, button style. Frames ask the skin for their
+look when created and again when the skin changes, so changing skin restyles the
+windows that exist right away, without a reload.
+
+Built-in skins (my proposal, four):
+
+1. **Blizzard** (default): the game's own dialog textures and buttons, so it looks
+   like part of the stock UI.
+2. **Parchment**: warm tooltip-style border and tones, in line with the classic look.
+3. **Dark**: dark flat panel with a thin border and a colored accent.
+4. **Minimal**: flat color, 1 pixel border, no textures. The lightest option.
+
+- The skin choice is account-wide, in `HearthkeepDB.settings`, selectable from the
+  window footer and the options panel, with immediate preview.
+- Skins apply to all Hearthkeep windows (Modes and Alts) and the minimap button, so
+  the suite looks like one thing.
+- If a skin refers to a texture or template the client does not have, it falls back to
+  the Minimal skin and records the problem for `/hk debug`.
+- Adding skins from other authors through a registration call is possible later and
+  out of phase 1. The skin data format is kept stable for that.
+- Following another UI addon's theme automatically is out of scope.
+
+### 14.4 Testing
+
+A test checks that every built-in skin defines every required field, and that a skin
+change restyles existing frames in the offline harness. Real-client looks are checked
+by eye on launch day (textures can differ in Forever).
