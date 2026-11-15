@@ -314,7 +314,14 @@ Built-in skins (my proposal, four):
   the Minimal skin and records the problem for `/hk debug`.
 - Adding skins from other authors through a registration call is possible later and
   out of phase 1. The skin data format is kept stable for that.
-- Following another UI addon's theme automatically is out of scope.
+- **Follow my UI** (requested by the user as "or theme", read by the author as: the
+  skin list also offers a choice that adopts the look of the UI addon the player
+  already uses). It is a fifth entry in the skin list. It works through one adapter
+  per UI addon (colors, border and font read from that addon), each feature-detected
+  and enabled only after it is confirmed in the real client. If no supported UI addon
+  is installed, the entry is hidden; if the adapter fails, the skin falls back to
+  Blizzard. It reads the other addon's look once when the window opens and on skin
+  change, never in a loop.
 
 ### 14.4 Testing
 
