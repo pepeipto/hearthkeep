@@ -42,6 +42,59 @@ local function followCursor()
   Minimap.SetAngle(Minimap.AngleFromCursor(cursorX / scale, cursorY / scale, centerX, centerY))
 end
 
+local ACTIONS = {
+  MENU_MODES = function() HK.Modes.Window.Toggle() end,
+  MENU_ALTS = function() Alts.Window.Toggle() end,
+  MENU_SETUP = function() HK.Modes.Setup.Open() end,
+}
+
+-- Entries depend on whether Hearthkeep_Modes is loaded.
+function Minimap.MenuEntries()
+  local keys = {}
+  local modes = HK.Modes
+  if modes and modes.Window then keys[#keys + 1] = "MENU_MODES" end
+  keys[#keys + 1] = "MENU_ALTS"
+  if modes and modes.Setup then keys[#keys + 1] = "MENU_SETUP" end
+  return keys
+end
+
+local function buildMenu()
+  local keys = Minimap.MenuEntries()
+  local menu = CreateFrame("Frame", "HearthkeepAltsMinimapMenu", UIParent)
+  menu:SetSize(130, 8 + #keys * 24)
+  menu:SetFrameStrata("DIALOG")
+  menu:EnableMouse(true)
+  Minimap.menuButtons = {}
+  for index, key in ipairs(keys) do
+    local button = CreateFrame("Button", nil, menu)
+    button:SetSize(122, 22)
+    button:SetPoint("TOPLEFT", menu, "TOPLEFT", 4, -4 - (index - 1) * 24)
+    local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
+    text:SetAllPoints()
+    text:SetText(HK.L[key])
+    button:SetScript("OnClick", function()
+      menu:Hide()
+      pcall(ACTIONS[key])
+    end)
+    Minimap.menuButtons[key] = button
+  end
+  HK.Skins.Track(menu, "window")
+  menu:Hide()
+  return menu
+end
+
+function Minimap.ShowMenu(anchor)
+  if not Minimap.menu then Minimap.menu = buildMenu() end
+  local menu = Minimap.menu
+  if menu:IsShown() then
+    menu:Hide()
+    return
+  end
+  menu:ClearAllPoints()
+  menu:SetPoint("TOPRIGHT", anchor or UIParent, anchor and "BOTTOMRIGHT" or "CENTER")
+  menu:Show()
+end
+
 function Minimap.Create()
   local button = Minimap.button
   if not button then
@@ -52,9 +105,15 @@ function Minimap.Create()
     icon:SetTexture("Interface\\Icons\\INV_Misc_Rune_01")
     icon:SetSize(20, 20)
     icon:SetPoint("CENTER")
-    button:RegisterForClicks("LeftButtonUp")
+    button:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     button:RegisterForDrag("LeftButton")
-    button:SetScript("OnClick", function() Alts.Window.Toggle() end)
+    button:SetScript("OnClick", function(self, mouseButton)
+      if mouseButton == "RightButton" then
+        Minimap.ShowMenu(self)
+      else
+        Alts.Window.Toggle()
+      end
+    end)
     button:SetScript("OnDragStart", function(self)
       self:SetScript("OnUpdate", function() pcall(followCursor) end)
     end)
@@ -68,4 +127,5 @@ end
 
 function Minimap.Hide()
   if Minimap.button then Minimap.button:Hide() end
+  if Minimap.menu then Minimap.menu:Hide() end
 end

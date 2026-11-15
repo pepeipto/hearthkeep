@@ -135,3 +135,58 @@ test("panel checkboxes are labeled and refresh on every show", function()
   panel.scripts.OnShow(panel)
   eq(box:GetChecked(), false)
 end)
+
+local function panelSetup(withModes)
+  local HK = Stub.load("Hearthkeep")
+  _G.Hearthkeep = HK
+  HearthkeepDB = nil
+  HK.Storage.Load()
+  local Modes = withModes and Stub.load("Hearthkeep_Modes") or nil
+  local panel
+  Settings = {
+    RegisterCanvasLayoutCategory = function(p) panel = p return {} end,
+    RegisterAddOnCategory = function() end,
+  }
+  HK.Options.RegisterPanel()
+  panel.scripts.OnShow(panel)
+  return HK, Modes
+end
+
+local function buttonByText(text)
+  for _, frame in ipairs(Stub.frames) do
+    if frame.kind == "Button" and frame.text == text then return frame end
+  end
+end
+
+test("the options panel offers every language and skin from the registries", function()
+  panelSetup()
+  for _, label in ipairs({ "English", "Español", "Deutsch", "Blizzard", "Parchment", "Dark", "Minimal" }) do
+    truthy(buttonByText(label), label .. " button missing")
+  end
+end)
+
+test("choosing a language or a skin in the panel applies it", function()
+  local HK = panelSetup()
+  buttonByText("Deutsch").scripts.OnClick(buttonByText("Deutsch"))
+  eq(HK.db.settings.language, "deDE")
+  buttonByText("Dark").scripts.OnClick(buttonByText("Dark"))
+  eq(HK.db.settings.skin, "dark")
+end)
+
+test("with Hearthkeep_Modes absent the panel hides the Modes entries", function()
+  local HK = panelSetup(false)
+  falsy(buttonByText(HK.L.SETUP_AGAIN))
+  falsy(buttonByText(HK.L.RESTORE_ORIGINAL))
+end)
+
+test("with Hearthkeep_Modes loaded the panel can rerun setup and restore", function()
+  local HK, Modes = panelSetup(true)
+  local again, restore = buttonByText(HK.L.SETUP_AGAIN), buttonByText(HK.L.RESTORE_ORIGINAL)
+  truthy(again)
+  truthy(restore)
+  again.scripts.OnClick(again)
+  truthy(Modes.Setup.frame)
+  restore.scripts.OnClick(restore)
+  eq(Modes.Window.selection, {})
+  eq(Modes.Window.frame:IsShown(), true)
+end)

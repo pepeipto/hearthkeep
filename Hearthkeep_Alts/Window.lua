@@ -310,6 +310,9 @@ local function createFrame()
   end
   if UISpecialFrames then table.insert(UISpecialFrames, "HearthkeepAltsWindow") end
   frame:Hide()
+  HK.Skins.Track(frame, "window")
+  -- The skin draws the backdrop; keep the flat fallback only if the client cannot.
+  if type(frame.SetBackdrop) == "function" then background:Hide() end
   Window.frame = frame
   return frame
 end

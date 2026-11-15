@@ -1,5 +1,6 @@
 local _, Modes = ...
 local HK = _G.Hearthkeep
+HK.Modes = Modes
 
 HK:RegisterModule("Modes", {
   OnEnable = function() end,

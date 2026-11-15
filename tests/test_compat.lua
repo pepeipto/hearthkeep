@@ -177,3 +177,23 @@ test("Probe lists the addon-management and messaging APIs", function()
   }
   for _, name in ipairs(wanted) do truthy(names[name], name .. " is not probed") end
 end)
+
+test("Diag.Report adds a memory line per Hearthkeep addon when the API exists", function()
+  local HK = Stub.load("Hearthkeep")
+  local updated = false
+  UpdateAddOnMemoryUsage = function() updated = true end
+  GetAddOnMemoryUsage = function(name)
+    if name == "Hearthkeep" then return 123.4 end
+    if name == "Hearthkeep_Alts" then return 56 end
+  end
+  local joined = table.concat(HK.Diag.Report(), "\n")
+  truthy(updated)
+  truthy(joined:find("Memory Hearthkeep: 123 KB", 1, true))
+  truthy(joined:find("Memory Hearthkeep_Alts: 56 KB", 1, true))
+  falsy(joined:find("Hearthkeep_Modes", 1, true))
+end)
+
+test("Diag.Report has no memory lines when the API is missing", function()
+  local HK = Stub.load("Hearthkeep")
+  falsy(table.concat(HK.Diag.Report(), "\n"):find("Memory", 1, true))
+end)

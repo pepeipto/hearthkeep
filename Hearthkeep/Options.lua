@@ -80,6 +80,53 @@ end
 local boxes = {}
 local panelBuilt = false
 
+-- A titled row of buttons below `anchor`. Returns the first button (the anchor of the next row).
+local function addRow(panel, anchor, titleText, items)
+  local title = panel:CreateFontString(nil, "OVERLAY", "GameFontNormal")
+  if anchor == panel then
+    title:SetPoint("TOPLEFT", panel, "TOPLEFT", 16, -16)
+  else
+    title:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -16)
+  end
+  title:SetText(titleText)
+  local first, previous
+  for _, item in ipairs(items) do
+    local button = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate")
+    button:SetSize(116, 22)
+    if previous then
+      button:SetPoint("LEFT", previous, "RIGHT", 6, 0)
+    else
+      button:SetPoint("TOPLEFT", title, "BOTTOMLEFT", 0, -6)
+      first = button
+    end
+    button:SetText(item.label)
+    button:SetScript("OnClick", item.action)
+    previous = button
+  end
+  return first or title
+end
+
+-- Language, skin, and (when Hearthkeep_Modes is loaded) setup and restore.
+function Options.AddControls(panel, anchor)
+  local languages, skins, extra = {}, {}, {}
+  for _, language in ipairs(HK.Locale.Languages()) do
+    languages[#languages + 1] = { label = language.label,
+      action = function() HK.Locale.SetLanguage(language.code) end }
+  end
+  for _, name in ipairs(HK.Skins.Names()) do
+    skins[#skins + 1] = { label = HK.L["SKIN_" .. string.upper(name)],
+      action = function() HK.Skins.SetActive(name) end }
+  end
+  local modes = HK.Modes
+  if modes and modes.Setup and modes.Window then
+    extra[#extra + 1] = { label = HK.L.SETUP_AGAIN, action = function() modes.Setup.Open() end }
+    extra[#extra + 1] = { label = HK.L.RESTORE_ORIGINAL, action = function() modes.Window.Open({}) end }
+  end
+  anchor = addRow(panel, anchor, HK.L.OPTIONS_LANGUAGE, languages)
+  anchor = addRow(panel, anchor, HK.L.OPTIONS_SKIN, skins)
+  if #extra > 0 then addRow(panel, anchor, "Hearthkeep", extra) end
+end
+
 local function buildPanel(panel)
   local previous
   for _, name in ipairs(HK:ModuleNames()) do
@@ -98,6 +145,8 @@ local function buildPanel(panel)
     boxes[#boxes + 1] = { box = box, name = name }
     previous = box
   end
+  local ok, err = pcall(Options.AddControls, panel, previous or panel)
+  if not ok then HK.Diag.Record("Options", "controls", err) end
 end
 
 local function refreshPanel()
