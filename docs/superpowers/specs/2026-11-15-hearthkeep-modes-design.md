@@ -464,3 +464,44 @@ anything is applied:
 The options panel offers the same settings as the assistant, in one page: language,
 skin, modes, remembered keeps per mode, and reset to the player's original addon state
 (`/hk mode restore`). It follows the selected skin.
+
+## 20. Updating
+
+Requested by the user: the addon can be updated from inside the game. What follows is
+the author's proposal, based on how the WoW addon environment is generally known to
+work (not yet verified in the Forever client).
+
+### 20.1 Limit
+
+An addon cannot download files, contact the internet or replace its own files from
+inside the game. A real update means new files in the addon folder, done outside the
+game by an addon manager or by our own installer.
+
+### 20.2 In-game update notice (phase 1)
+
+- Hearthkeep tells the player when a newer version exists. It does this by comparing
+  version numbers with other Hearthkeep users through addon messages (guild, party,
+  raid), the usual approach of other addons. No server and no internet needed.
+- The notice is a single quiet line in chat and a marker in the window, once per new
+  version. It never interrupts play, never repeats, and contains no advertising or
+  donation request (base design constraints).
+- It names the new version and where to get it (the addon manager the player uses),
+  without a direct download link.
+- Feature-detected: if the addon message API is missing or restricted in Forever, the
+  notice turns itself off and `/hk debug` says so.
+- No data about the player is sent beyond the addon name and version number.
+
+### 20.3 Updating itself
+
+- **Addon managers** (the CurseForge app, WowUp and similar) update the files by
+  themselves once the new version is published. This is the supported route in phase 1.
+- **Phase 2 installer:** the desktop program updates Hearthkeep and the third-party
+  addons of each mode from the manifest, then the player presses reload in game. It
+  may also write refreshed mode data (the manifest) for the addon to read on reload.
+- After an update the player only needs the reload that the game requires. Hearthkeep
+  keeps its settings across versions through the storage migrations of the base design.
+
+### 20.4 Not planned
+
+Updating without the player doing anything outside the game, and any hidden network
+or telemetry. Both are impossible from an addon or against the project's principles.
