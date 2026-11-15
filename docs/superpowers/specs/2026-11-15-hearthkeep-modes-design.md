@@ -369,3 +369,24 @@ proposal.
   channel.
 - Other addon managers that read CurseForge or repository releases can pick it up
   without extra work; no per-manager build is planned.
+
+## 16. Several modes active at once (supersedes parts of 7.3, 7.7, 13.2 and 14.2)
+
+Requested by the user: the player can activate several modes together.
+
+- Modes are **toggles**, not a single choice. In the window the mode buttons at the
+  top can be switched on in any combination (for example Quests and Open World).
+- The set of addons to turn on is the **union** of the `core` addons of all active
+  modes. An addon is turned off only if it is `core` in some mode and in no active
+  mode, unless the player ticks it to keep it (section 7.3 still applies).
+- The switch list shows, grouped by mode, what each active mode brings, and a group
+  for addons from inactive modes that are currently on (unticked by default).
+- Storage: the active mode becomes a list (`active = { "quests", "world" }`) per
+  character. The remembered keeps (7.3) are stored per combination of active modes,
+  so each combination restores what the player ticked last time.
+- "Modified" (13.6) is checked against the union of the active modes.
+- `/hk mode quests world` activates several at once; `/hk mode` with one id keeps
+  working and activates just that one.
+- The same single "Accept change" button and the automatic reload apply (7.3).
+- My call: no limit on how many modes can be active. If an addon is `core` in two
+  active modes it appears once.
