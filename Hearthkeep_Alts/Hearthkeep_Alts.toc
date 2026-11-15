@@ -2,7 +2,7 @@
 ## Title: Hearthkeep Alts
 ## Notes: An overview of all your characters: level, gold, professions and cooldowns.
 ## Author: Carlos Fernandez Medina
-## Version: 0.1.0
+## Version: 0.2.0
 ## Dependencies: Hearthkeep
 
 Format.lua

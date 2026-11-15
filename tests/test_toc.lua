@@ -1,4 +1,4 @@
-local ADDONS = { "Hearthkeep", "Hearthkeep_Alts" }
+local ADDONS = { "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes" }
 
 local function readLines(path)
   local fh = assert(io.open(path, "r"), "cannot open " .. path)
@@ -38,16 +38,42 @@ end)
 test("only the core declares SavedVariables HearthkeepDB", function()
   eq(readToc("Hearthkeep").fields.SavedVariables, "HearthkeepDB")
   eq(readToc("Hearthkeep_Alts").fields.SavedVariables, nil)
+  eq(readToc("Hearthkeep_Modes").fields.SavedVariables, nil)
 end)
 
 test("Alts declares Dependencies Hearthkeep", function()
   eq(readToc("Hearthkeep_Alts").fields.Dependencies, "Hearthkeep")
 end)
 
-test("both TOCs share the same Version", function()
+test("all TOCs share the same Version", function()
   local core = readToc("Hearthkeep").fields.Version
   truthy(core)
-  eq(readToc("Hearthkeep_Alts").fields.Version, core)
+  for _, dir in ipairs(ADDONS) do eq(readToc(dir).fields.Version, core) end
+end)
+
+test("the release version is 0.2.0", function()
+  eq(readToc("Hearthkeep").fields.Version, "0.2.0")
+end)
+
+test("Hearthkeep_Modes declares Dependencies Hearthkeep", function()
+  eq(readToc("Hearthkeep_Modes").fields.Dependencies, "Hearthkeep")
+end)
+
+test("no Lua file except the minimap drag mentions OnUpdate", function()
+  for _, dir in ipairs(ADDONS) do
+    for _, file in ipairs(readToc(dir).files) do
+      if dir .. "/" .. file ~= "Hearthkeep_Alts/Minimap.lua" then
+        for number, line in ipairs(readLines(dir .. "/" .. file)) do
+          falsy(line:gsub("%-%-.*$", ""):find("OnUpdate", 1, true), dir .. "/" .. file .. ":" .. number)
+        end
+      end
+    end
+  end
+end)
+
+test("the build script packs all three addon folders", function()
+  local text = table.concat(readLines("scripts/build.ps1"), "\n")
+  for _, dir in ipairs(ADDONS) do truthy(text:find("'" .. dir .. "'", 1, true), dir .. " missing from build.ps1") end
 end)
 
 test("no Lua file uses goto, table.unpack or integer division", function()

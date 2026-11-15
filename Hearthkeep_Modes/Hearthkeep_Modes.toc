@@ -2,7 +2,7 @@
 ## Title: Hearthkeep Modes
 ## Notes: Switch your addons by activity: raid, dungeons, PvP, quests, open world.
 ## Author: Carlos Fernandez Medina
-## Version: 0.1.0
+## Version: 0.2.0
 ## Dependencies: Hearthkeep
 
 Engine.lua
