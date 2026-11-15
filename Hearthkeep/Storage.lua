@@ -3,13 +3,19 @@ local _, HK = ...
 local Storage = {}
 HK.Storage = Storage
 
-Storage.CURRENT_VERSION = 1
+Storage.CURRENT_VERSION = 2
 Storage.migrations = {}
 
 local function defaults()
   return {
-    version = 1,
-    settings = { modules = {}, minimapAngle = 215, minimapHidden = false },
+    version = 2,
+    settings = {
+      modules = {}, minimapAngle = 215, minimapHidden = false,
+      language = "enUS", skin = "blizzard", setupDone = false, latestSeen = "",
+    },
+    modeState = {},
+    modeKeeps = {},
+    modeEdits = {},
     ui = { sort = "level", desc = true },
     characters = {},
   }
@@ -52,6 +58,56 @@ local function sanitizeCharacters(characters)
   end
 end
 
+local function stringList(list)
+  local clean = {}
+  if type(list) ~= "table" then return clean end
+  for _, value in ipairs(list) do
+    if type(value) == "string" then clean[#clean + 1] = value end
+  end
+  return clean
+end
+
+local function sanitizeModeState(state)
+  for key, entry in pairs(state) do
+    if type(entry) ~= "table" then
+      state[key] = nil
+    else
+      if type(entry.baseline) == "table" then
+        local clean = {}
+        for folder, on in pairs(entry.baseline) do
+          if type(folder) == "string" and type(on) == "boolean" then clean[folder] = on end
+        end
+        entry.baseline = clean
+      else
+        entry.baseline = nil
+      end
+      entry.active = stringList(entry.active)
+    end
+  end
+end
+
+local function sanitizeModeKeeps(keeps)
+  for key, list in pairs(keeps) do
+    if type(list) ~= "table" then keeps[key] = nil else keeps[key] = stringList(list) end
+  end
+end
+
+local function sanitizeModeEdits(edits)
+  for key, entry in pairs(edits) do
+    if type(entry) ~= "table" then
+      edits[key] = nil
+    else
+      edits[key] = { add = stringList(entry.add), remove = stringList(entry.remove) }
+    end
+  end
+end
+
+function Storage.CharKey()
+  local guid = type(UnitGUID) == "function" and UnitGUID("player") or nil
+  if guid then return guid end
+  return tostring(UnitName and UnitName("player")) .. "-" .. tostring(GetRealmName and GetRealmName())
+end
+
 local function validPosition(pos)
   return type(pos) == "table" and type(pos[1]) == "string" and type(pos[2]) == "string"
     and type(pos[3]) == "number" and type(pos[4]) == "number"
@@ -62,6 +118,9 @@ function Storage.Migrate(db, migrations, target)
   target = target or Storage.CURRENT_VERSION
   fill(db, defaults())
   sanitizeCharacters(db.characters)
+  sanitizeModeState(db.modeState)
+  sanitizeModeKeeps(db.modeKeeps)
+  sanitizeModeEdits(db.modeEdits)
   if db.ui.pos ~= nil and not validPosition(db.ui.pos) then db.ui.pos = nil end
   for version = db.version + 1, target do
     if migrations[version] then migrations[version](db) end
