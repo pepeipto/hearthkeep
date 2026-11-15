@@ -134,6 +134,8 @@ third-party guides and is not confirmed.
 - Every change follows the same two steps (requested by the user): the player
   accepts, and if the change needs a reload, Hearthkeep does the reload itself right
   after. This holds for a mode switch and for `/hk mode restore`.
+- The list has one button, "Accept change". Clicking it is the whole trigger: the
+  reload, when needed, happens automatically on that click, with no further step.
 - On accept: record the baseline if none exists, apply enable/disable, apply any
   verified profiles, store the active mode, and then reload the UI automatically if
   the applied changes need it. The accept is the only prompt; there is no second
