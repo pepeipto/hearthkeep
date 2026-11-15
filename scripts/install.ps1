@@ -2,7 +2,7 @@
 # It only COPIES: it never deletes anything. Run in PowerShell:
 #   powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 # Optional: -AddOns "C:\path\to\Interface\AddOns" to skip the search.
-param([string]$AddOns, [string]$Branch = 'feature/modes')
+param([string]$AddOns, [string]$Branch = 'feature/bosses')
 $ErrorActionPreference = 'Stop'
 
 if (-not $AddOns) {
