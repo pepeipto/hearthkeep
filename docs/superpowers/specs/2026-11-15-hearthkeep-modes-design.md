@@ -200,3 +200,33 @@ checking Forever releases), which adapters ship, wording of messages.
 4. Forever-compatible releases for each addon in the initial lists.
 5. Whether players want this: validate with a first release, since there is no direct
    evidence of demand (the research found guides, not requests).
+
+## 13. Calls added after the builder check (author's calls, not the user's)
+
+1. **Restore baseline.** The first switch from a state Hearthkeep did not set records
+   a *baseline*: the player's own enabled state of the managed set. Later switches
+   never overwrite it. `/hk mode restore` always returns to the baseline and clears
+   the active mode. Storage: `baseline` (set once) and `active`.
+2. **What a mode does.** Switching to mode M turns ON M's `core` addons. It turns OFF
+   addons that are `core` in some other mode and are not `core` in M. `optional`
+   addons are never changed by a switch; they only appear in the missing-addons
+   panel. An addon that is `core` in both source and target mode stays on. The
+   confirmation diff lists exactly these on and off changes.
+3. **Editing mode lists.** Adding an addon to a mode puts it in the managed set and
+   the next diff flags it as newly managed. Removing an addon from every mode takes
+   it out of the managed set and Hearthkeep leaves it in its current state.
+4. **Reload.** Reload goes through one function. If the client does not allow it from
+   addon code, Hearthkeep tells the player to type `/reload`. The new active mode is
+   stored before the reload and checked after it.
+5. **Where state lives.** Edits to mode addon lists are account-wide. `baseline` and
+   `active` are per character. A character that never used Hearthkeep simply has no
+   mode yet.
+6. **"Modified".** Checked at login and when the panel opens. A mode counts as
+   modified only if one of its own `core` addons is off or one of the addons it should
+   have turned off is on. `optional` addons never count.
+7. **Dependencies.** The diff also shows addons that the game reports as required by
+   or requiring a changed addon. Plugin or module folders of a managed addon must be
+   listed in the manifest to be managed; Hearthkeep does not guess them.
+8. **Profiles.** A profile name in the manifest is a request: if the addon has no
+   profile with that name, Hearthkeep skips it and says so; it never creates
+   profiles.
