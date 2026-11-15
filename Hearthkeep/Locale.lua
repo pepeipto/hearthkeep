@@ -36,6 +36,7 @@ Locale.Register("enUS", {
   READY = "ready",
   READY_ONE = "ready",
   HELP = "Commands: /hk (open), /hk modules, /hk enable <module>, /hk disable <module>, /hk debug",
+  RELOAD_MANUAL = "Type /reload to finish applying the change.",
 })
 
 Locale.Register("esES", {
@@ -53,4 +54,5 @@ Locale.Register("esES", {
   READY = "listos",
   READY_ONE = "listo",
   HELP = "Comandos: /hk (abrir), /hk modules, /hk enable <módulo>, /hk disable <módulo>, /hk debug",
+  RELOAD_MANUAL = "Escribe /reload para terminar de aplicar el cambio.",
 })

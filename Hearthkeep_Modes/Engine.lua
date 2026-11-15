@@ -92,3 +92,121 @@ function Engine.Plan(ids, keeps)
   plan.needsReload = #plan.on > 0 or #plan.off > 0
   return plan
 end
+
+local function sortedFolders(map)
+  local list = {}
+  for folder in pairs(map) do list[#list + 1] = folder end
+  table.sort(list)
+  return list
+end
+
+local function stateFor(create)
+  local all = HK.db.modeState
+  local key = HK.Storage.CharKey()
+  if not all[key] and create then all[key] = { active = {} } end
+  return all[key]
+end
+
+local function copyList(list)
+  local out = {}
+  for i, value in ipairs(list or {}) do out[i] = value end
+  return out
+end
+
+-- Everything installed that a mode could change, as enabled flags.
+local function recordBaseline(state)
+  if state.baseline ~= nil then return end
+  local baseline = {}
+  for folder in pairs(HK.Manifest.ManagedFolders()) do
+    local info = HK.AddonCtl.Info(folder)
+    if info.installed then baseline[folder] = info.enabled end
+  end
+  state.baseline = baseline
+end
+
+-- Enables and disables, continuing past failures. Returns the failed folders.
+local function change(on, off)
+  local failed = {}
+  for _, folder in ipairs(on) do
+    if not HK.AddonCtl.SetEnabled(folder, true) then failed[#failed + 1] = folder end
+  end
+  for _, folder in ipairs(off) do
+    if not HK.AddonCtl.SetEnabled(folder, false) then failed[#failed + 1] = folder end
+  end
+  return failed
+end
+
+local function finish(plan, failed)
+  local changed = (#plan.on + #plan.off) - #failed > 0
+  local info = { reload = "none", failed = failed }
+  if not changed then return true, info end
+  if HK.AddonCtl.CanReload() then
+    info.reload = "done"
+    HK.AddonCtl.Reload()
+  else
+    info.reload = "manual"
+    print("Hearthkeep: " .. HK.L.RELOAD_MANUAL)
+  end
+  return true, info
+end
+
+local function refusal()
+  if HK.AddonCtl.InCombat() then return "combat" end
+  if not HK.AddonCtl.Available() then return "unavailable" end
+end
+
+-- Applies a plan from Plan(). The state is stored before any reload.
+function Engine.Apply(plan)
+  local reason = refusal()
+  if reason then return false, reason end
+  if #plan.ids == 0 then return false, "nochange" end
+  local state = stateFor(true)
+  recordBaseline(state)
+  local failed = change(plan.on, plan.off)
+  state.active = copyList(plan.ids)
+  HK.db.modeKeeps[Engine.ComboKey(plan.ids)] = copyList(plan.keep)
+  return finish(plan, failed)
+end
+
+-- The plan that puts every managed addon back to the player's original state.
+function Engine.PlanRestore()
+  local plan = { ids = {}, restore = true, on = {}, off = {}, needsReload = false }
+  local state = stateFor(false)
+  if not state or not state.baseline then
+    plan.nothing = true
+    return plan
+  end
+  for _, folder in ipairs(sortedFolders(state.baseline)) do
+    local info = HK.AddonCtl.Info(folder)
+    if info.installed then
+      if state.baseline[folder] and not info.enabled then
+        plan.on[#plan.on + 1] = folder
+      elseif not state.baseline[folder] and info.enabled then
+        plan.off[#plan.off + 1] = folder
+      end
+    end
+  end
+  plan.needsReload = #plan.on > 0 or #plan.off > 0
+  return plan
+end
+
+function Engine.Restore()
+  local reason = refusal()
+  if reason then return false, reason end
+  local plan = Engine.PlanRestore()
+  if plan.nothing then return false, "nochange" end
+  local failed = change(plan.on, plan.off)
+  local state = stateFor(true)
+  state.baseline = nil
+  state.active = {}
+  return finish(plan, failed)
+end
+
+-- "inactive" with no modes, "modified" when reality drifted from the active modes.
+function Engine.Status(ids)
+  local active = knownIds(ids)
+  if #active == 0 then return "inactive" end
+  local plan = Engine.Plan(active, HK.db.modeKeeps[Engine.ComboKey(active)])
+  if #plan.on > 0 or #plan.off > 0 then return "modified" end
+  return "ok"
+end
