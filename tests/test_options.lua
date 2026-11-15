@@ -14,8 +14,9 @@ test("enUS strings are the default", function()
 end)
 
 test("esES overrides enUS and missing esES keys fall back to enUS", function()
-  Stub.locale = "esES"
   local HK = Stub.load("Hearthkeep")
+  HearthkeepDB = { settings = { language = "esES" } }
+  HK.Storage.Load()
   eq(HK.L.COL_NAME, "Nombre")
   HK.Locale.Register("enUS", { ONLY_EN = "only" })
   eq(HK.L.ONLY_EN, "only")

@@ -50,19 +50,19 @@ test("cooldownText counts ready cooldowns, localized; none tracked shows an em d
   eq(rows[3].cooldownText, "—")
 end)
 
-test("cooldownText is Spanish on an esES client", function()
-  Stub.locale = "esES"
-  local _, Alts = setup()
+test("cooldownText is Spanish when the language setting is esES", function()
+  local HK, Alts = setup()
+  HK.db.settings.language = "esES"
   save(Alts, "a", { name = "Alice", cooldowns = { { readyAt = 0 }, { readyAt = 0 } } })
   eq(Alts.Window.BuildRows({})[1].cooldownText, "2 listos")
 end)
 
 test("cooldownText uses the singular for one ready cooldown", function()
-  Stub.locale = "esES"
-  local _, Alts = setup()
+  local HK, Alts = setup()
+  HK.db.settings.language = "esES"
   save(Alts, "a", { name = "Alice", cooldowns = { { readyAt = 0 }, { readyAt = Stub.now + 100 } } })
   eq(Alts.Window.BuildRows({})[1].cooldownText, "1 listo")
-  Stub.locale = "enUS"
+  HK.db.settings.language = "enUS"
   eq(Alts.Window.BuildRows({})[1].cooldownText, "1 ready")
 end)
 
