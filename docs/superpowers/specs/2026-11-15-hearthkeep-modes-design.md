@@ -328,3 +328,44 @@ Built-in skins (my proposal, four):
 A test checks that every built-in skin defines every required field, and that a skin
 change restyles existing frames in the offline harness. Real-client looks are checked
 by eye on launch day (textures can differ in Forever).
+
+## 15. Languages and distribution
+
+Requested by the user: the addon must be available in several languages, and must be
+publishable on CurseForge or with its own website. The details are the author's
+proposal.
+
+### 15.1 Languages
+
+- Base: enUS (fallback for every missing string) and esES, as in the base design.
+- Proposed target set, matching the game's own client languages: enUS, esES, esMX,
+  deDE, frFR, itIT, ptBR, ruRU, koKR, zhCN, zhTW. Which ones ship first is the
+  user's call (see the open question in the conversation).
+- One file per language, each returns immediately unless it matches the client
+  language, so only the active language is held in memory.
+- Everything the player sees goes through the locale table, including mode names, the
+  `purpose` line of each addon in the manifest, skin names, messages and `/hk` help.
+  Addon names themselves (Questie, Details!...) are never translated.
+- Only the game's own fonts are used, so Cyrillic, Korean and Chinese text display
+  correctly without shipping font files.
+- A test fails if a language file has a key that enUS does not, and reports
+  untranslated keys per language so contributors can see what is missing.
+- Community translation: the strings live in plain files with a short contributor
+  guide, so players can send translations through the repository. Using the
+  CurseForge localization tool together with the packager is possible and is to be
+  checked during planning.
+
+### 15.2 Distribution
+
+- **CurseForge** (primary): one project, one zip, English description first and
+  translated descriptions after it, real in-game screenshots, changelog per release,
+  and no external download links on the page (policy in the base design).
+- **Own website** (proposed, after the first release): a simple static site published
+  from the repository (for example with GitHub Pages), with no server to run. Pages:
+  what it is, screenshots of each skin, install steps for the usual addon managers,
+  changelog, supported languages and a link to the CurseForge page. Same languages
+  as the addon, chosen by a switcher. It carries no ads, as the addon itself.
+- The repository stays public under MIT, and the zip is the same file on every
+  channel.
+- Other addon managers that read CurseForge or repository releases can pick it up
+  without extra work; no per-manager build is planned.
