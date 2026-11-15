@@ -68,3 +68,11 @@ Everything here is unverified in the real client. Note what differs and fix `Add
 - [ ] `/hk debug` shows a memory line for each Hearthkeep addon; compare with the weight of the addons the modes replace.
 - [ ] The German text is reviewed by a native speaker; the Spanish text is reviewed too.
 - [ ] No profile adapter and no "Follow my UI" skin ship in 0.2.0; confirm the skin list has four entries.
+
+## 8. Bosses (0.2.0)
+
+- [ ] `/hk debug` lists `C_EncounterTimeline.*`, `C_EncounterEvents.SetEventSound` and `UnitAffectingCombat`. If the encounter timeline is missing, `/hk bosses` still shows the notes and the warning settings are disabled with a note.
+- [ ] `/hk bosses` opens the window out of combat, shows the raids and bosses, and the notes change with the boss. It is refused in combat and closes when combat starts.
+- [ ] Check every note line against the real Forever encounter before publishing; remove or fix any line that is wrong. The notes are general reminders written without the client and are unverified.
+- [ ] No settings adapter ships in 0.2.0: confirm in the client what `C_EncounterEvents` offers (names, arguments) before writing one. Until then the warning checkboxes only store the choice.
+- [ ] Decide with the real encounter data whether Forever has more raids than Molten Core and Onyxia's Lair, and add their notes.

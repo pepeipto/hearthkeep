@@ -8,6 +8,7 @@
 - New: German. A client set to Latin American Spanish uses the Spanish text.
 - New: quiet update notice when another Hearthkeep user has a newer version.
 - New: right-click menu on the minimap button; options panel for language and skin; `/hk debug` shows the memory used by each Hearthkeep addon.
+- New: **Hearthkeep Bosses**. Short pre-pull notes for a few raid bosses (English only for now) and warning settings (low, medium, high). The warning settings only work if the client has the encounter timeline; otherwise they are off and `/hk debug` says so. `/hk bosses` opens it, and it is not available in combat.
 - The Alts window now follows the selected skin.
 - Not verified in the real WoW Forever client: how addons are turned on and off and how the interface reloads, the look of each skin, the update notice, and which addon folder names the modes expect. See `docs/launch-day-checklist.md`.
 

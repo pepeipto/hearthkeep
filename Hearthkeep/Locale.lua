@@ -244,3 +244,27 @@ Locale.Register("deDE", {
   SETUP_AGAIN = "Einrichtung wiederholen", RESTORE_ORIGINAL = "Meine ursprünglichen Addons wiederherstellen",
   OPTIONS_LANGUAGE = "Sprache", OPTIONS_SKIN = "Design",
 })
+
+-- Boss notes (Hearthkeep Bosses). Spanish and German need native review before release.
+-- The notes themselves are in English only for now.
+Locale.Register("enUS", {
+  BOSSES_TITLE = "Hearthkeep - Boss notes", RAID_MC = "Molten Core", RAID_ONY = "Onyxia's Lair",
+  BOSSES_UNVERIFIED = "Notes written by Hearthkeep, not yet checked in Forever. English only.",
+  BOSSES_OFF = "this client has no encounter timeline", WARNINGS = "Warnings",
+  LEVEL_LOW = "Low", LEVEL_MEDIUM = "Medium", LEVEL_HIGH = "High",
+  UNKNOWN_RAID = "Unknown raid: ", BOSSES_HELP = "bosses [raid] - boss notes",
+})
+Locale.Register("esES", {
+  BOSSES_TITLE = "Hearthkeep - Notas de jefes", RAID_MC = "Núcleo de Magma", RAID_ONY = "Guarida de Onyxia",
+  BOSSES_UNVERIFIED = "Notas escritas por Hearthkeep, aún sin comprobar en Forever. Solo en inglés.",
+  BOSSES_OFF = "este cliente no tiene línea de tiempo de encuentros", WARNINGS = "Avisos",
+  LEVEL_LOW = "Bajo", LEVEL_MEDIUM = "Medio", LEVEL_HIGH = "Alto",
+  UNKNOWN_RAID = "Banda desconocida: ", BOSSES_HELP = "bosses [banda] - notas de jefes",
+})
+Locale.Register("deDE", {
+  BOSSES_TITLE = "Hearthkeep - Boss-Notizen", RAID_MC = "Geschmolzener Kern", RAID_ONY = "Onyxias Hort",
+  BOSSES_UNVERIFIED = "Von Hearthkeep geschrieben, in Forever noch nicht geprüft. Nur Englisch.",
+  BOSSES_OFF = "dieser Client hat keine Begegnungs-Zeitleiste", WARNINGS = "Warnungen",
+  LEVEL_LOW = "Niedrig", LEVEL_MEDIUM = "Mittel", LEVEL_HIGH = "Hoch",
+  UNKNOWN_RAID = "Unbekannter Schlachtzug: ", BOSSES_HELP = "bosses [Schlachtzug] - Boss-Notizen",
+})

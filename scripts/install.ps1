@@ -1,4 +1,4 @@
-# Installs Hearthkeep (the three addon folders) into your WoW AddOns folder.
+# Installs Hearthkeep (the four addon folders) into your WoW AddOns folder.
 # It only COPIES: it never deletes anything. Run in PowerShell:
 #   powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 # Optional: -AddOns "C:\path\to\Interface\AddOns" to skip the search.
@@ -39,7 +39,7 @@ $url = "https://github.com/pepeipto/hearthkeep/archive/refs/heads/$Branch.zip"
 Invoke-WebRequest -Uri $url -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath $temp
 $source = Get-ChildItem -Path $temp -Directory | Select-Object -First 1
-foreach ($folder in 'Hearthkeep', 'Hearthkeep_Alts', 'Hearthkeep_Modes') {
+foreach ($folder in 'Hearthkeep', 'Hearthkeep_Alts', 'Hearthkeep_Modes', 'Hearthkeep_Bosses') {
     $from = Join-Path $source.FullName $folder
     if (-not (Test-Path $from)) { throw "Missing $folder in the download. Nothing more was copied." }
     Copy-Item -Path $from -Destination $AddOns -Recurse -Force

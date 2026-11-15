@@ -1,0 +1,11 @@
+## Interface: 16001
+## Title: Hearthkeep Bosses
+## Notes: Boss notes and clearer encounter warnings, built on what the game lets addons use.
+## Author: Carlos Fernandez Medina
+## Version: 0.2.0
+## Dependencies: Hearthkeep
+
+Notes.lua
+Settings.lua
+Window.lua
+Commands.lua

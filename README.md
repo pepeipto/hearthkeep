@@ -10,6 +10,8 @@ Hearthkeep is a small core plus optional modules. A fresh install is in English;
 
 - **Modes**: switch your addons by activity (Raid, Dungeons, PvP, Quests, Open World). Pick one or several modes, tick any addon from another mode you want to keep, press Accept change, and the interface reloads when needed. It only touches addons that belong to a mode, and `/hk mode restore` brings back your original setup. It manages addons you already installed; it cannot install them. Open it with `/hk mode` or the minimap menu.
 
+- **Bosses**: short notes for each boss before the pull, and warning settings that use the game's own encounter timeline when the client has it. Open it with `/hk bosses`. Not available in combat.
+
 ## Commands
 
 | Command | What it does |
@@ -22,6 +24,7 @@ Hearthkeep is a small core plus optional modules. A fresh install is in English;
 | `/hk mode` | Open the Modes window |
 | `/hk mode <id> [id ...]` | Open it with those modes selected (`raid`, `dungeons`, `pvp`, `quests`, `world`) |
 | `/hk mode restore` | Open it to restore your original addons |
+| `/hk bosses [raid]` | Open the boss notes (`mc`, `ony`) |
 | `/hk setup` | Run the setup assistant again |
 | `/hk debug` | Print diagnostics (API availability, memory per addon and recent errors) |
 

@@ -16,6 +16,7 @@ local function defaults()
     modeState = {},
     modeKeeps = {},
     modeEdits = {},
+    bosses = { levels = {} },
     ui = { sort = "level", desc = true },
     characters = {},
   }
@@ -92,6 +93,28 @@ local function sanitizeModeKeeps(keeps)
   end
 end
 
+local function sanitizeBosses(bosses)
+  local levels = {}
+  for _, level in ipairs({ "low", "medium", "high" }) do
+    local entry = type(bosses.levels) == "table" and bosses.levels[level] or nil
+    if type(entry) == "table" then
+      local clean = {}
+      if type(entry.enabled) == "boolean" then clean.enabled = entry.enabled end
+      if type(entry.sound) == "boolean" then clean.sound = entry.sound end
+      local color = entry.color
+      if type(color) == "table" and #color == 3 then
+        local valid = true
+        for i = 1, 3 do
+          if type(color[i]) ~= "number" or color[i] < 0 or color[i] > 1 then valid = false end
+        end
+        if valid then clean.color = { color[1], color[2], color[3] } end
+      end
+      levels[level] = clean
+    end
+  end
+  bosses.levels = levels
+end
+
 local function sanitizeModeEdits(edits)
   for key, entry in pairs(edits) do
     if type(entry) ~= "table" then
@@ -121,6 +144,7 @@ function Storage.Migrate(db, migrations, target)
   sanitizeModeState(db.modeState)
   sanitizeModeKeeps(db.modeKeeps)
   sanitizeModeEdits(db.modeEdits)
+  sanitizeBosses(db.bosses)
   if db.ui.pos ~= nil and not validPosition(db.ui.pos) then db.ui.pos = nil end
   for version = db.version + 1, target do
     if migrations[version] then migrations[version](db) end

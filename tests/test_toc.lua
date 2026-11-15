@@ -1,4 +1,4 @@
-local ADDONS = { "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes" }
+local ADDONS = { "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses" }
 
 local function readLines(path)
   local fh = assert(io.open(path, "r"), "cannot open " .. path)
@@ -71,7 +71,7 @@ test("no Lua file except the minimap drag mentions OnUpdate", function()
   end
 end)
 
-test("the build script packs all three addon folders", function()
+test("the build script packs every addon folder", function()
   local text = table.concat(readLines("scripts/build.ps1"), "\n")
   for _, dir in ipairs(ADDONS) do truthy(text:find("'" .. dir .. "'", 1, true), dir .. " missing from build.ps1") end
 end)
@@ -88,4 +88,14 @@ test("no Lua file uses goto, table.unpack or integer division", function()
       end
     end
   end
+end)
+
+test("Hearthkeep_Bosses declares Dependencies Hearthkeep and no SavedVariables", function()
+  eq(readToc("Hearthkeep_Bosses").fields.Dependencies, "Hearthkeep")
+  eq(readToc("Hearthkeep_Bosses").fields.SavedVariables, nil)
+end)
+
+test("the install script copies every addon folder", function()
+  local text = table.concat(readLines("scripts/install.ps1"), "\n")
+  for _, dir in ipairs(ADDONS) do truthy(text:find("'" .. dir .. "'", 1, true), dir .. " missing from install.ps1") end
 end)
