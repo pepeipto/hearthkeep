@@ -404,3 +404,16 @@ Chosen by the user: Spanish, English and French.
 - The CurseForge description and the website ship in the same three languages.
 - The French strings need a native review before release, since no one in the project
   has been identified as a French speaker (open point for the owner).
+
+## 18. Decision: languages of the first release, revised (supersedes section 17)
+
+Changed by the user: Spanish, English and German (German replaces French).
+
+- Ships in the first release: enUS, esES and deDE.
+- My call, unchanged: a client set to esMX uses the esES strings. Any other client
+  language falls back to enUS.
+- French and the other languages in 15.1 (frFR, itIT, ptBR, ruRU, koKR, zhCN, zhTW)
+  stay as later additions through community translations.
+- The CurseForge description and the website ship in the same three languages.
+- The German strings need a native review before release, since no one in the project
+  has been identified as a German speaker (open point for the owner).
