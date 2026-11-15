@@ -521,3 +521,22 @@ community is by far the largest.
   documentation are written in English first, with Spanish and German after it.
 - English text is the reference for translators: a change to a string is made in
   English first and the other languages are updated from it.
+
+## 22. Language choice as the first screen (refines 19.2 and 21)
+
+Requested by the user: offer the language choice at installation, to make it easier.
+
+- An addon cannot show anything during file installation. The earliest possible moment
+  is the first login after installing, so that is where the choice appears.
+- The very first screen of the setup assistant is a language picker, shown before any
+  other text, with all three languages written in their own language on the same
+  screen: `English`, `Español`, `Deutsch`. A player who does not read English can
+  still understand it.
+- English is highlighted as the default (21). One click on a language applies it
+  immediately and the rest of the assistant continues in that language.
+- If the player skips or closes the picker, English stays and the picker is not shown
+  again; it remains available from `/hk setup` and the options panel.
+- The picker is a single small frame created only when needed and released afterwards
+  (14.1 weight rules).
+- This replaces step 1 of 19.2: the four steps become a language screen followed by
+  look, modes and addons.
