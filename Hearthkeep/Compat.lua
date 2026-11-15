@@ -9,6 +9,11 @@ local PROBED = {
   "GetSpellCooldown", "GetSpellInfo", "IsPlayerSpell", "IsSpellKnown",
   "issecretvalue", "GetServerTime", "GetTime", "UnitGUID", "GetMoney",
   "C_Timer.After", "Settings.RegisterCanvasLayoutCategory",
+  -- Addon management, reload and addon messages (used by Hearthkeep_Modes).
+  "C_AddOns.GetAddOnInfo", "C_AddOns.GetAddOnEnableState", "C_AddOns.EnableAddOn",
+  "C_AddOns.DisableAddOn", "GetAddOnInfo", "GetAddOnEnableState", "EnableAddOn",
+  "DisableAddOn", "ReloadUI", "InCombatLockdown", "C_ChatInfo.SendAddonMessage",
+  "C_ChatInfo.RegisterAddonMessagePrefix",
 }
 
 -- Headers under which the classic skill list files professions (enUS and esES).

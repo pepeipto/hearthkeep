@@ -164,3 +164,16 @@ test("IsSpellKnown guards the returned value against secrets", function()
   eq(HK.Compat.IsSpellKnown(1), false)
   truthy(checked >= 1)
 end)
+
+test("Probe lists the addon-management and messaging APIs", function()
+  local HK = Stub.load("Hearthkeep")
+  local names = {}
+  for _, entry in ipairs(HK.Compat.Probe()) do names[entry.name] = true end
+  local wanted = {
+    "C_AddOns.GetAddOnInfo", "C_AddOns.GetAddOnEnableState", "C_AddOns.EnableAddOn",
+    "C_AddOns.DisableAddOn", "GetAddOnInfo", "GetAddOnEnableState", "EnableAddOn",
+    "DisableAddOn", "ReloadUI", "InCombatLockdown", "C_ChatInfo.SendAddonMessage",
+    "C_ChatInfo.RegisterAddonMessagePrefix",
+  }
+  for _, name in ipairs(wanted) do truthy(names[name], name .. " is not probed") end
+end)
