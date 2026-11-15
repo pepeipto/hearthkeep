@@ -122,8 +122,14 @@ third-party guides and is not confirmed.
 - Entry points: `/hk mode`, `/hk mode <id>`, and a menu on the minimap button.
 - Hearthkeep only touches addons that appear in some mode (the **managed set**).
   Everything else is left alone.
-- Switching computes a diff over the managed set: what will be turned on, what will
-  be turned off. The player sees the diff and confirms.
+- Switching opens a **selection list** over the managed set, not just a yes/no
+  confirmation. The target mode's addons come preselected. Addons from other modes
+  that are currently on are also listed, unchecked by default, and the player can tick
+  any of them to keep it on. (Requested by the user: the player chooses which addons
+  load, with the mode's own preloaded, and can keep some from another mode.) The
+  player sees the resulting on and off changes and confirms.
+- My call: the keeps the player ticks are remembered per mode, so the next switch to
+  that mode already has them ticked.
 - It runs out of combat only. If the player is in combat it refuses and says why.
 - On confirm: record the previous enabled state of the managed set for this
   character, apply enable/disable, apply any verified profiles, store the active mode,
@@ -207,11 +213,13 @@ checking Forever releases), which adapters ship, wording of messages.
    a *baseline*: the player's own enabled state of the managed set. Later switches
    never overwrite it. `/hk mode restore` always returns to the baseline and clears
    the active mode. Storage: `baseline` (set once) and `active`.
-2. **What a mode does.** Switching to mode M turns ON M's `core` addons. It turns OFF
-   addons that are `core` in some other mode and are not `core` in M. `optional`
-   addons are never changed by a switch; they only appear in the missing-addons
-   panel. An addon that is `core` in both source and target mode stays on. The
-   confirmation diff lists exactly these on and off changes.
+2. **What a mode does.** The switch list starts from these defaults: M's `core`
+   addons are ticked (on). Addons that are `core` in some other mode and not in M are
+   unticked (off), unless the player ticks them to keep them (see 7.3). `optional`
+   addons are never changed by default; they appear in the list unticked and the
+   missing-addons panel. An addon that is `core` in both source and target mode is
+   ticked. What the player leaves ticked when confirming is what gets applied, and
+   the diff shows exactly those on and off changes.
 3. **Editing mode lists.** Adding an addon to a mode puts it in the managed set and
    the next diff flags it as newly managed. Removing an addon from every mode takes
    it out of the managed set and Hearthkeep leaves it in its current state.
