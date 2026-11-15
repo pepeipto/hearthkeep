@@ -22,6 +22,8 @@ local function knownIds(ids)
   return active
 end
 
+Engine.KnownIds = knownIds
+
 local function toSet(list)
   local set = {}
   for _, value in ipairs(list or {}) do set[value] = true end

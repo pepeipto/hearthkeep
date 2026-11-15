@@ -6,3 +6,5 @@
 ## Dependencies: Hearthkeep
 
 Engine.lua
+Window.lua
+Commands.lua
