@@ -390,3 +390,17 @@ Requested by the user: the player can activate several modes together.
 - The same single "Accept change" button and the automatic reload apply (7.3).
 - My call: no limit on how many modes can be active. If an addon is `core` in two
   active modes it appears once.
+
+## 17. Decision: languages of the first release (supersedes the open point in 15.1)
+
+Chosen by the user: Spanish, English and French.
+
+- Ships in the first release: enUS, esES and frFR.
+- My call: a client set to esMX uses the esES strings, so Latin American Spanish
+  players are covered without a separate file. Any other client language falls back to
+  enUS.
+- The other languages in 15.1 (deDE, itIT, ptBR, ruRU, koKR, zhCN, zhTW) stay as later
+  additions through community translations.
+- The CurseForge description and the website ship in the same three languages.
+- The French strings need a native review before release, since no one in the project
+  has been identified as a French speaker (open point for the owner).
