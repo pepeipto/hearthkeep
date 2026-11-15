@@ -417,3 +417,50 @@ Changed by the user: Spanish, English and German (German replaces French).
 - The CurseForge description and the website ship in the same three languages.
 - The German strings need a native review before release, since no one in the project
   has been identified as a German speaker (open point for the owner).
+
+## 19. First-run setup assistant (simple configuration)
+
+Requested by the user: a simple configuration with options, so that from a single
+installation everything ends up installed and configured to the player's taste,
+addons included. The wizard design is the author's proposal.
+
+### 19.1 What a single installation can and cannot do
+
+- **Can:** everything that ships in the Hearthkeep zip (the core, Alts, Modes and any
+  addon of our own suite added later) installs together. The assistant then chooses
+  which of those are enabled and how they look.
+- **Can:** enable, disable and configure third-party addons the player already has
+  installed (7.3, 7.4).
+- **Cannot, from inside the game:** download or install third-party addons. An addon
+  cannot do that, and bundling other authors' addons in our zip was rejected (section
+  6). For third-party addons the assistant lists what is missing (7.5); installing
+  them automatically is the phase 2 installer.
+
+### 19.2 The assistant
+
+Opens on the first login after installation (the player can skip it) and any time with
+`/hk setup`. Four short steps, each with a sensible default, and a summary before
+anything is applied:
+
+```
+1. Language      [ English v ]   (esES, enUS, deDE; follows the client by default)
+2. Look          ( ) Blizzard  ( ) Parchment  ( ) Dark  ( ) Minimal  ( ) Follow my UI
+3. What do you play?   [x] Raid  [x] Dungeons  [ ] PvP  [x] Quests  [ ] Open World
+4. Addons        per chosen mode: installed (ticked), missing (listed by name)
+                 [ Apply and reload ]
+```
+
+- Step 3 sets the modes that start active (several allowed, section 16).
+- Step 4 uses the same selection list as a mode switch, with the same single accept
+  button and automatic reload (7.3). Nothing is applied before the summary is accepted.
+- Every choice can be changed later from the options panel or `/hk setup`.
+- One setup per account. A character that has not been set up inherits the account's
+  choices of language, look and modes. The enabled addons stay per character (7.3).
+- Weight: the assistant is created only when opened and removed from memory after
+  closing. It adds no cost in normal play.
+
+### 19.3 Options panel
+
+The options panel offers the same settings as the assistant, in one page: language,
+skin, modes, remembered keeps per mode, and reset to the player's original addon state
+(`/hk mode restore`). It follows the selected skin.
