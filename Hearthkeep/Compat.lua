@@ -14,6 +14,10 @@ local PROBED = {
   "C_AddOns.DisableAddOn", "GetAddOnInfo", "GetAddOnEnableState", "EnableAddOn",
   "DisableAddOn", "ReloadUI", "InCombatLockdown", "C_ChatInfo.SendAddonMessage",
   "C_ChatInfo.RegisterAddonMessagePrefix",
+  -- Encounter timeline (what a boss-mod addon could build on in Forever; unverified).
+  "C_EncounterTimeline.IsFeatureAvailable", "C_EncounterTimeline.HasActiveEvents",
+  "C_EncounterTimeline.FinishScriptEvent", "C_EncounterTimeline.CancelAllScriptEvents",
+  "C_EncounterEvents.SetEventSound", "UnitAffectingCombat",
 }
 
 -- Headers under which the classic skill list files professions (enUS and esES).

@@ -197,3 +197,14 @@ test("Diag.Report has no memory lines when the API is missing", function()
   local HK = Stub.load("Hearthkeep")
   falsy(table.concat(HK.Diag.Report(), "\n"):find("Memory", 1, true))
 end)
+
+test("Probe lists the encounter-timeline APIs a boss mod would need", function()
+  local HK = Stub.load("Hearthkeep")
+  local names = {}
+  for _, entry in ipairs(HK.Compat.Probe()) do names[entry.name] = true end
+  for _, name in ipairs({
+    "C_EncounterTimeline.IsFeatureAvailable", "C_EncounterTimeline.HasActiveEvents",
+    "C_EncounterTimeline.FinishScriptEvent", "C_EncounterTimeline.CancelAllScriptEvents",
+    "C_EncounterEvents.SetEventSound", "UnitAffectingCombat",
+  }) do truthy(names[name], name .. " is not probed") end
+end)
