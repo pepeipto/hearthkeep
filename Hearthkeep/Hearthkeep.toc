@@ -13,4 +13,5 @@ Compat.lua
 AddonCtl.lua
 Manifest.lua
 Skins.lua
+Version.lua
 Options.lua

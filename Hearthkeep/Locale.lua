@@ -216,3 +216,14 @@ Locale.Register("deDE", {
   SKIP = "Überspringen", NEXT = "Weiter", FINISH = "Fertig",
   SETUP_HELP = "setup - Einrichtungsassistent erneut öffnen",
 })
+
+-- Update notice (Task 11). Spanish and German need native review before release.
+Locale.Register("enUS", {
+  UPDATE_AVAILABLE = "A new version of Hearthkeep is available: %s. Update it with your addon manager.",
+})
+Locale.Register("esES", {
+  UPDATE_AVAILABLE = "Hay una nueva versión de Hearthkeep: %s. Actualízala con tu gestor de addons.",
+})
+Locale.Register("deDE", {
+  UPDATE_AVAILABLE = "Eine neue Version von Hearthkeep ist verfügbar: %s. Aktualisiere sie mit deinem Addon-Manager.",
+})
