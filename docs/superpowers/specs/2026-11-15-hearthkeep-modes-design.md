@@ -131,10 +131,15 @@ third-party guides and is not confirmed.
 - My call: the keeps the player ticks are remembered per mode, so the next switch to
   that mode already has them ticked.
 - It runs out of combat only. If the player is in combat it refuses and says why.
-- On confirm: record the previous enabled state of the managed set for this
-  character, apply enable/disable, apply any verified profiles, store the active mode,
-  and ask for a UI reload (Hearthkeep triggers it after the confirmation, never
-  silently).
+- Every change follows the same two steps (requested by the user): the player
+  accepts, and if the change needs a reload, Hearthkeep does the reload itself right
+  after. This holds for a mode switch and for `/hk mode restore`.
+- On accept: record the baseline if none exists, apply enable/disable, apply any
+  verified profiles, store the active mode, and then reload the UI automatically if
+  the applied changes need it. The accept is the only prompt; there is no second
+  "reload now?" question. My call: a change that needs no reload (for example one
+  that only turns addons on that the game can load late, if that proves to work in the
+  client) is applied without one, and the confirmation says so.
 - `/hk mode restore` returns the managed set to the recorded previous state.
 - State is per character (WoW addon enable state is per character), default; the
   active mode is stored in `HearthkeepDB`.
@@ -223,8 +228,9 @@ checking Forever releases), which adapters ship, wording of messages.
 3. **Editing mode lists.** Adding an addon to a mode puts it in the managed set and
    the next diff flags it as newly managed. Removing an addon from every mode takes
    it out of the managed set and Hearthkeep leaves it in its current state.
-4. **Reload.** Reload goes through one function. If the client does not allow it from
-   addon code, Hearthkeep tells the player to type `/reload`. The new active mode is
+4. **Reload.** Reload goes through one function and runs automatically after the
+   player accepts a change that needs it (see 7.3). If the client does not allow it
+   from addon code, Hearthkeep tells the player to type `/reload`. The new active mode is
    stored before the reload and checked after it.
 5. **Where state lives.** Edits to mode addon lists are account-wide. `baseline` and
    `active` are per character. A character that never used Hearthkeep simply has no
