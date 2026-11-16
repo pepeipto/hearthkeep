@@ -26,6 +26,18 @@ Source: a screenshot of `/hk debug` from the owner's WoW Forever client, build i
   line now says exactly what it returned). It may only report available inside encounters
   or instances; to be checked.
 
+## Boss encounter timeline (owner's second `/hk debug`)
+- `C_EncounterTimeline.IsFeatureAvailable()` returned **false** (seen out of an instance).
+  The functions exist, but the client says the feature is not available. Until it is
+  seen to return true (for example inside a raid or dungeon), the warning settings of
+  Hearthkeep Bosses stay off and only the boss notes work.
+- Consequence for the design: do not build the appearance layer on the timeline. A boss
+  mod in Forever may be limited to notes unless the timeline turns on in encounters.
+
+## Modes window
+- The owner reported that `/hk mode quests` opens the Modes window in the real client
+  (reported by the owner; no screenshot yet).
+
 ## Still unverified
 - That the return shapes and argument order of the `C_AddOns` functions match what
   `AddonCtl` assumes (needs a real `/hk mode` Accept).
