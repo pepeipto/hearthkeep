@@ -18,6 +18,10 @@ local PROBED = {
   "C_EncounterTimeline.IsFeatureAvailable", "C_EncounterTimeline.HasActiveEvents",
   "C_EncounterTimeline.FinishScriptEvent", "C_EncounterTimeline.CancelAllScriptEvents",
   "C_EncounterEvents.SetEventSound", "UnitAffectingCombat",
+  -- Quests and maps (what a guided-questing addon would build on; unverified).
+  "C_QuestLog.GetNumQuestLogEntries", "C_QuestLog.GetInfo", "C_QuestLog.GetQuestObjectives",
+  "C_QuestLog.IsQuestFlaggedCompleted", "C_Map.GetBestMapForUnit", "C_Map.GetPlayerMapPosition",
+  "C_Map.SetUserWaypoint", "C_QuestLog.GetQuestsOnMap",
 }
 
 -- Headers under which the classic skill list files professions (enUS and esES).

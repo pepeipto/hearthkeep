@@ -34,7 +34,7 @@ Read directly from each project's LICENSE file (shallow clone, 2026-11-15):
    project reads or copies its source. Requirements come from its public description,
    player complaints and requests, Blizzard documentation and our own observation of the
    game. The author of a function writes it from that, not from the other code.
-3. **One permitted fork: Quests.** The Quests addon starts as a fork of Questie, under
+3. **(Superseded on 2026-11-16: the owner decided Quests is our own addon, not a fork; see `2026-11-16-hearthkeep-quests-design.md`. The Questie fork below is no longer planned.)** **One permitted fork: Quests.** The Quests addon starts as a fork of Questie, under
    GPLv3 (the license the Questie team offers). It has its own name and logo, its own
    addon folder with its own `LICENSE` file and a visible credit to the Questie
    contributors, and its source stays public. Hearthkeep itself stays MIT; the two are

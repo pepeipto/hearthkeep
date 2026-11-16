@@ -208,3 +208,14 @@ test("Probe lists the encounter-timeline APIs a boss mod would need", function()
     "C_EncounterEvents.SetEventSound", "UnitAffectingCombat",
   }) do truthy(names[name], name .. " is not probed") end
 end)
+
+test("Probe lists the quest and map APIs a guided-questing addon would need", function()
+  local HK = Stub.load("Hearthkeep")
+  local names = {}
+  for _, entry in ipairs(HK.Compat.Probe()) do names[entry.name] = true end
+  for _, name in ipairs({
+    "C_QuestLog.GetNumQuestLogEntries", "C_QuestLog.GetInfo", "C_QuestLog.GetQuestObjectives",
+    "C_QuestLog.IsQuestFlaggedCompleted", "C_Map.GetBestMapForUnit", "C_Map.GetPlayerMapPosition",
+    "C_Map.SetUserWaypoint", "C_QuestLog.GetQuestsOnMap",
+  }) do truthy(names[name], name .. " is not probed") end
+end)
