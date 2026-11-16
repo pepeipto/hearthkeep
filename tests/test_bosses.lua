@@ -148,3 +148,22 @@ test("/hk bosses opens the window, with a raid id or an unknown id", function()
   SlashCmdList.HEARTHKEEP("bosses nonsense")
   truthy(table.concat(Stub.printed, "\n"):find(HK.L.UNKNOWN_RAID, 1, true))
 end)
+
+test("the diagnostics line says what the encounter timeline answered", function()
+  local HK = setup()
+  C_EncounterTimeline = { IsFeatureAvailable = function() return false end }
+  Stub.fire("PLAYER_LOGIN")
+  truthy(table.concat(HK.Diag.Report(), "\n"):find("returned false", 1, true))
+end)
+
+test("the diagnostics line names a raised error and a missing namespace", function()
+  local HK, Bosses = setup()
+  eq(select(2, Bosses.Check()), "C_EncounterTimeline is not present")
+  C_EncounterTimeline = { IsFeatureAvailable = function() error("boom") end }
+  local ok, detail = Bosses.Check()
+  eq(ok, false)
+  truthy(detail:find("raised", 1, true))
+  C_EncounterTimeline = { IsFeatureAvailable = function() return true end }
+  eq(Bosses.Check(), true)
+  eq(HK ~= nil, true)
+end)

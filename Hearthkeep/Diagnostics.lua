@@ -34,7 +34,7 @@ function Diag.Report()
   if type(memory) == "function" then
     local update = (_G.C_AddOns and _G.C_AddOns.UpdateAddOnMemoryUsage) or _G.UpdateAddOnMemoryUsage
     if type(update) == "function" then pcall(update) end
-    for _, addon in ipairs({ "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes" }) do
+    for _, addon in ipairs({ "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses" }) do
       local ok, kb = pcall(memory, addon)
       if ok and type(kb) == "number" then
         lines[#lines + 1] = string.format("Memory %s: %d KB", addon, math.floor(kb + 0.5))

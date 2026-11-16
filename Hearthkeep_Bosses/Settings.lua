@@ -12,12 +12,21 @@ local DEFAULTS = {
 }
 local adapters = {}
 
--- True only when the client has the encounter timeline (unverified in Forever).
-function Bosses.Available()
+-- Asks the client whether the encounter timeline is usable. Returns the answer and a
+-- sentence saying what the client said, for /hk debug (unverified in Forever until seen).
+function Bosses.Check()
   local timeline = _G.C_EncounterTimeline
-  if type(timeline) ~= "table" or type(timeline.IsFeatureAvailable) ~= "function" then return false end
-  local ok, available = pcall(timeline.IsFeatureAvailable)
-  return ok and available and true or false
+  if type(timeline) ~= "table" or type(timeline.IsFeatureAvailable) ~= "function" then
+    return false, "C_EncounterTimeline is not present"
+  end
+  local ok, value = pcall(timeline.IsFeatureAvailable)
+  if not ok then return false, "IsFeatureAvailable raised: " .. tostring(value) end
+  if value then return true, "available" end
+  return false, "IsFeatureAvailable returned " .. tostring(value)
+end
+
+function Bosses.Available()
+  return (Bosses.Check())
 end
 
 local function stored(level)

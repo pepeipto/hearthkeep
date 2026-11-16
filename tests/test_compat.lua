@@ -219,3 +219,9 @@ test("Probe lists the quest and map APIs a guided-questing addon would need", fu
     "C_Map.SetUserWaypoint", "C_QuestLog.GetQuestsOnMap",
   }) do truthy(names[name], name .. " is not probed") end
 end)
+
+test("Diag.Report includes the memory of Hearthkeep_Bosses when it is loaded", function()
+  local HK = Stub.load("Hearthkeep")
+  GetAddOnMemoryUsage = function(name) if name == "Hearthkeep_Bosses" then return 41 end end
+  truthy(table.concat(HK.Diag.Report(), "\n"):find("Memory Hearthkeep_Bosses: 41 KB", 1, true))
+end)

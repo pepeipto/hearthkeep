@@ -4,11 +4,12 @@ HK.Bosses = Bosses
 
 HK:RegisterModule("Bosses", {
   OnEnable = function()
-    if Bosses.Available() then
+    local available, detail = Bosses.Check()
+    if available then
       Bosses.Settings.Apply()
     else
       HK.Diag.Record("Bosses", "features",
-        "encounter API missing: the warning settings are off; boss notes still work")
+        detail .. ": the warning settings are off; boss notes still work")
     end
   end,
   OnDisable = function() Bosses.Window.Hide() end,
