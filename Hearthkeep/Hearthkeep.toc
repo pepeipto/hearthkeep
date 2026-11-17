@@ -17,3 +17,7 @@ Version.lua
 Options.lua
 HUD.lua
 Home.lua
+Modules\Adventure\Locale.lua
+Modules\Adventure\Training.lua
+Modules\Adventure\Professions.lua
+Modules\Adventure\Waypoint.lua
