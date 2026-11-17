@@ -1,82 +1,132 @@
 # Study: Naowh Forever (reference addon)
 
-Date: 2026-11-17
-Purpose: understand a very popular all-in-one Forever addon, to learn from its features and
-its configuration. Hearthkeep builds its own versions; nothing is copied.
+Date: 2026-11-17 (updated the same day from the official pages)
+Purpose: understand the most popular all-in-one Forever addon so Hearthkeep can offer the
+same kind of integrated experience with **its own modules, written by us**. Nothing is
+copied: no code, text, data or art. Feature ideas are not protected; their expression is.
 
 ## Sources and limits
 
-Gathered from search summaries of its CurseForge page and file pages, a German news article
-and the author's announcement. **The pages themselves could not be opened from this
-session**, so the exact settings screens are unknown. The most reliable way to complete this
-file is the owner's screenshots from the game (section 6).
+- CurseForge project page `curseforge.com/wow/addons/naowhforever` (read 2026-11-17).
+- Official site `naowh.gg/forever/` (read 2026-11-17), which lists every module.
+- The GitHub links on CurseForge (`naowh-gaming/NaowhForever`) return 404: the repository
+  is private. We did **not** read any of its code, and we should not (clean room).
+- Not yet seen: the in-game settings screens. Owner screenshots would complete section 4.
 
 ## 1. What it is
 
-- Described as the "all-in-one companion addon for World of Warcraft Forever", by the
-  streamer Naowh. Free on CurseForge. Version listing seen: 1.2.33, updated 2026-11-15.
-- Still in beta and changing fast, according to its page. Bugs and feedback go to the
-  team's Discord.
-- Popularity: about 89.5K downloads on a page snapshot; a German article said over 100,000
-  downloads before launch (the figures differ in date).
-- **License: All Rights Reserved.** So no code, text or art can be reused or bundled
-  without permission (suite strategy, rule 2).
+- "Companion" addon for WoW Forever by the streamer Naowh and a small team (owner + 2
+  authors). Free, no ads; funded by Patreon with an in-game supporter badge.
+- About 930K downloads on CurseForge on 2026-11-17 (it was ~90K a few days earlier).
+  Version 1.2.30-1.2.33, updated almost daily. A separate addon from the same team,
+  "Smart Reminders" (~133K), and community add-ons (Chinese localisation, class colours).
+- License: All Rights Reserved.
+- Opened with `/nf`, from the minimap addon menu, or from an entry in the Escape menu.
+  Every module is off until the player turns it on.
 
-## 2. Features reported
+## 2. Modules (as the official site groups them)
 
-- **Dungeon Journal**: bosses, their loot and their location on maps, for dungeons and
-  raids; boss tips; dungeon quests (with a "show done quests" filter); level ranges that
-  match the game's group finder; dungeon quest waypoints; kill counts per boss.
-- **BiS list**: pick gear for your spec, keep a list, and each item shows where it comes
-  from (dungeon, quest, profession, reputation). Your picks also show in item tooltips
-  and in the journal.
-- **Training planner**, **Gear Sets**, **Blessings** (paladin blessings shared across
-  groups), a **threat meter**, and a small **WoW quiz**.
-- **Quality-of-life options** (from community lists): restock reminders, map pins, tooltip
-  options, quest automation, faster auto-loot, auto repair and sell junk, an XP-per-hour
-  tracker.
-- Interface touches: supporter badges that can be turned off.
+**Adventure**
+1. **BiS list** - best item per slot for your spec, where it comes from (dungeon, quest,
+   profession, reputation), what you own, ranked suggestions, editable stat weights,
+   upgrade %, several saved lists, import/export, alert when a picked item drops, marks
+   in tooltips and in the journal. `/nfbis`.
+2. **Dungeon journal** - dungeons and raids (including Forever's new ones), bosses on a
+   map, loot per boss with BiS marked, boss tips, dungeon quests with requirements,
+   chains, map pins and waypoints, kill counts, reputation and PvP reward tabs.
+   `/nfjournal`, `/nfdj`.
+3. **Training planner** - what you can train now, what each level brings and its cost,
+   where the trainer is.
+4. **Professions** - recipes, sources, reagents (have/need), unlearned recipes, craft timer.
 
-## 3. How it is configured (the pattern worth learning)
+**Combat**
+5. **Group and raid inspect** - gear score, item level, enchanted count for each member,
+   and who runs the addon (with version check).
+6. **Threat meter** - threat on your target for the group, warning before pulling.
+7. **Smart reminders** - which defensive to press before a boss's big hit.
+8. **Swing timer** - from the game's own swing timer, with queued-attack marks.
+9. **Gear sets** - swap sets from a bar, or automatically while mounted or resting.
+10. **Buffs and reminders** - missing food/flask/elixir, rested, campfire time left.
+11. **Blessings** - paladin blessing assignments shared between the group's paladins.
 
-- **First run asks for a profile**: "Minimalist" (most features off) or "Recommended" (more
-  features on). Very close to Hearthkeep's setup assistant.
-- **Modular**: each big feature (journal, BiS list, ...) can be switched on or off.
-- **Home page in the options window with one button per module** (added in 1.2.22).
-- **Slash commands per tool**: `/nf` (main window), `/nfbis`, `/nfjournal` or `/nfdj`, and
-  others for gear sets, blessings, threat and the quiz.
-- Options are grouped by area (for example QoL > Interface).
+**Quality of life**
+12. **Gear score** - one number for your gear and what your BiS would make it.
+13. **XP bar and ticker** - quest XP and rested on the bar, XP/hour, time to level,
+    session time, party progress.
+14. **Waypoint pin** - destination marked in the world with distance and walking time.
+15. **Bag space** - free slots, stack button, cheapest items to clear when full.
+16. **Supporter badges** - an icon next to supporters' names in chat.
+17. **Loot feed** - everything looted, BiS marked, gold per hour.
+18. **Top bar** - friends, guild, clock, buttons, FPS and latency.
+19. Everyday options: sell junk, repair, faster loot, restock.
 
-## 4. What it shows us
+**Utilities**
+20. **Macros** - macros checked and explained in plain words; health/food/focus macros
+    kept up to date.
+21. **HUD editor** - drag every on-screen element on guides, align and space it.
 
-- Players like **one addon, modular, with sensible profiles**. That is the Hearthkeep idea.
-- Its most valued content is **data and guidance** (journal, BiS, quests), not clever code.
-- Updates are very frequent; a beta label is accepted if it is honest.
+**Coming soon:** group finder (cross-realm by whisper, applicant score/BiS/kills).
+Also mentioned: library-book and sleeping-bag quest discovery helpers, a quiz.
 
-## 5. How this maps to Hearthkeep (our own versions, original)
+## 3. Engineering promises they advertise (a good bar for us too)
 
-| Their idea | Hearthkeep today | Possible own version |
-|------------|------------------|----------------------|
-| Profile at first run | Setup assistant (language, look, modes) | Add "Minimal / Recommended" presets per module |
-| Modules on or off | Modes and module toggles | Home page with a button per module |
-| Dungeon Journal with boss tips | Bosses notes (2 raids) | Journal with loot and maps, our own data |
-| BiS list | none | Own BiS planner, our own data and sources |
-| Quest waypoints and tips | Quests design (guided steps) | Same, original routes via the recorder |
-| QoL options | none | Choose which to build; check each against Blizzard's policy |
-| Threat meter | none | Likely restricted by Forever's addon rules: do not promise |
-| Quest automation | none | Out of scope for now (automation, policy) |
+- ~0.04 ms per frame on average; nothing runs (no events, frames, OnUpdate) until a
+  module is turned on; no garbage per bag scan.
+- Addon messages accepted only from the real sender (name + GUID), rate-limited.
+- Imports parsed as data, never executed; size and depth capped.
+- Blizzard UI only hooked, never overwritten (avoid taint).
+- 130+ offline tests and luacheck at zero warnings. (Hearthkeep has 283 offline tests.)
 
-Not to copy: code, text, tips, data or art. Ideas and feature lists are not protected.
+## 4. How it is configured
 
-## 6. What is still missing (the owner can supply it)
+- One window, one page per module, an "Open" button to show the module's own window.
+- Profile at first run: "Minimalist" or "Recommended".
+- Theme choice and a HUD editor to move elements.
+- Slash command per tool.
 
-1. Screenshots of the options window: the home page and each module's settings.
-2. The list of slash commands (`/nf` help).
-3. What the first-run profile choice changes, module by module.
-4. Which features players use most, and what they complain about.
+## 5. Hearthkeep's own version, module by module
 
-## 7. Open items
+The owner's goal: the same integrated experience, but every module ours (MIT), and the
+suite still able to switch third-party addons by activity (Modes).
 
-1. Decide which of the rows in section 5 to build, in what order.
-2. Policy check for each QoL feature before building it.
-3. Optional: ask the author about collaboration or permission; it is "All Rights Reserved".
+| # | Their module | Hearthkeep today | Our version | Notes / risk |
+|---|--------------|------------------|-------------|--------------|
+| - | One window, page per module | Options panel, Modes window | **Home window** (`/hk`): one page per module, on/off, Open | Foundation for everything else |
+| - | First-run profile | Setup assistant | Add Minimal / Recommended presets | Small |
+| - | Theme, HUD editor | 4 skins | Skins exist; HUD editor later | Medium |
+| 1 | BiS list | - | `Hearthkeep_Gear`: BiS lists + gear score | Needs our own item data |
+| 2 | Dungeon journal | Boss notes (MC, Onyxia) | `Hearthkeep_Journal`: bosses, loot, maps, quests | Data is the big job |
+| 3 | Training planner | - | In `Hearthkeep_Alts` or own module | Needs spell/rank data |
+| 4 | Professions | Alts: professions, cooldowns | Extend Alts | Medium |
+| 5 | Group inspect | Version notice via addon messages | `Hearthkeep_Group` | Inspect APIs to verify |
+| 6 | Threat meter | - | Later | Check what Forever exposes |
+| 7 | Smart reminders | Bosses warning model (off) | Bosses | `C_EncounterTimeline` was off outside instances |
+| 8 | Swing timer | - | Later | Check API |
+| 9 | Gear sets | - | `Hearthkeep_Gear` | Equipment APIs to verify |
+| 10 | Buffs and reminders | - | QoL module | Small |
+| 11 | Blessings | - | Later | Niche |
+| 12 | Gear score | - | `Hearthkeep_Gear` | Our own formula |
+| 13 | XP ticker | - | QoL module | Small, safe |
+| 14 | Waypoint pin | Quests design (arrow) | `Hearthkeep_Quests` | Shared with quests |
+| 15 | Bag space | - | QoL module | Small |
+| 16 | Badges | - | No (no donation asks in game) | Owner decision |
+| 17 | Loot feed | - | QoL module | Small |
+| 18 | Top bar | - | QoL module | Medium |
+| 19 | Junk/repair | - | QoL module | Small, safe |
+| 20 | Macros | - | Later | Medium |
+| 21 | HUD editor | - | Later | Medium |
+
+Module order proposed (smallest risk and most visible first):
+1. **Home window + module switches + presets** (the frame everything plugs into).
+2. **QoL module** (XP ticker, bag space, junk/repair, loot feed, buff reminders): many
+   small, safe, visible wins with no big data files.
+3. **Gear** (gear score, BiS, gear sets).
+4. **Journal** (reuses Bosses notes; needs data).
+5. **Quests** (already designed), then group inspect, combat tools last.
+
+## 6. Open items
+
+1. Owner: confirm the module order above.
+2. Owner, optional: screenshots of the in-game settings (home page, a module page).
+3. Policy check for each QoL feature before building it.
+4. Verify in the client the APIs each module needs (`/hk debug` can list them).
