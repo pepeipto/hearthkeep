@@ -102,6 +102,7 @@ function XP.Reset()
   state.samples = {}
   state.lastXP = game.xp
   state.lastMax = game.max
+  state.lastLevel = game.level
 end
 
 function XP.Refresh()
@@ -120,13 +121,16 @@ end
 function XP.OnXP()
   local game = XP.Read()
   local state = XP.state
+  local level = game.level
   if game.xp and state.lastXP then
-    local gain = QoL.XPGain(state.lastXP, state.lastMax, game.xp)
+    local gain
+    gain, level = QoL.XPGain(state.lastXP, state.lastMax, game.xp, state.lastLevel, game.level, game.max)
     if gain > 0 then
       state.gained = state.gained + gain
       state.samples[#state.samples + 1] = { t = now(), xp = gain }
     end
   end
+  if level then state.lastLevel = level end
   if game.xp then state.lastXP = game.xp end
   if game.max then state.lastMax = game.max end
   XP.Refresh()

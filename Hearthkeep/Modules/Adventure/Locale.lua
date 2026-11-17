@@ -1,6 +1,51 @@
 local _, HK = ...
 
--- Strings for the Adventure modules: Training, Professions and Waypoint.
+-- Strings for the Adventure modules: Training, Professions and Waypoint, and the two
+-- small helpers they share. Nothing here touches the game at load.
+
+local Adventure = {}
+HK.Adventure = Adventure
+
+-- Turns a module on when a command or its Open button needs it, and says so in one line
+-- (the switch on the Home page turns it off again).
+function Adventure.EnsureOn(name)
+  if HK:IsModuleEnabled(name) then return false end
+  HK:EnableModule(name)
+  local def = HK:ModuleInfo(name)
+  print("Hearthkeep: " .. HK.L.ADV_TURNED_ON:format(HK.L[def and def.title or name] or name))
+  return true
+end
+
+-- Runs read() with every collapsed header of a list window (trainer, profession)
+-- expanded, then collapses those same headers again, bottom up so the indices stay
+-- valid. spec = {
+--   count()      -> number of lines shown (or nil),
+--   header(i)    -> name, isHeader, isExpanded (name nil when unreadable),
+--   expand()     -> truthy when "expand all" was called,
+--   collapse(i),
+-- }; expand/collapse may be nil when the client lacks them, then read() runs as is.
+-- Returns ok, result (as pcall) and whether anything was expanded.
+function Adventure.WithHeadersExpanded(spec, read)
+  local collapsed, changed = {}, false
+  if spec.expand and spec.collapse then
+    for i = 1, spec.count() or 0 do
+      local name, isHeader, expanded = spec.header(i)
+      if isHeader and name and not expanded then
+        collapsed[name] = true
+        changed = true
+      end
+    end
+    if changed then changed = spec.expand() and true or false end
+  end
+  local ok, result = pcall(read)
+  if changed then
+    for i = spec.count() or 0, 1, -1 do
+      local name, isHeader = spec.header(i)
+      if isHeader and name and collapsed[name] then spec.collapse(i) end
+    end
+  end
+  return ok, result, changed
+end
 
 HK.Locale.Register("enUS", {
   MOD_TRAINING = "Training",
@@ -12,6 +57,7 @@ HK.Locale.Register("enUS", {
 
   ADV_GOLD = "g", ADV_SILVER = "s", ADV_COPPER = "c",
   ADV_COMBAT = "the window opens after combat.",
+  ADV_TURNED_ON = "module %s turned on (you can turn it off in /hk).",
 
   TRAIN_TITLE = "Training",
   TRAIN_NOW = "Can learn now",
@@ -39,6 +85,8 @@ HK.Locale.Register("enUS", {
   WAY_NO_POSITION = "no position here",
   WAY_OTHER_MAP = "the waypoint is on another map",
   WAY_YARDS = "%d yd",
+  -- Distance unit shown per game yard: yards in English, metres (0.9144 m) elsewhere.
+  WAY_UNIT_PER_YARD = "1",
   WAY_PERCENT = "%.1f%% of the map",
   WAY_COMBAT = "the arrow appears after combat.",
   WAY_NONE = "no waypoint set.",
@@ -50,10 +98,11 @@ HK.Locale.Register("esES", {
   MOD_PROFESSIONS = "Profesiones",
   MOD_PROFESSIONS_DESC = "Recuerda las recetas de cada ventana de profesión que abres. Muestra los componentes que tienes y los que necesitas (bolsas y banco) y cuántos puedes fabricar ahora.",
   MOD_WAYPOINT = "Punto de ruta",
-  MOD_WAYPOINT_DESC = "Escribe /hk way 45.2 67.8 y tendrás una flecha hacia ese punto de tu mapa actual, con la distancia en metros y el tiempo a pie. Se borra sola al llegar.",
+  MOD_WAYPOINT_DESC = "Escribe /hk way 45.2 67.8 y tendrás una flecha hacia ese punto de tu mapa actual, con la distancia en metros (convertida de las yardas del juego) y el tiempo a pie. Se borra sola al llegar.",
 
   ADV_GOLD = "o", ADV_SILVER = "p", ADV_COPPER = "c",
   ADV_COMBAT = "la ventana se abre al salir de combate.",
+  ADV_TURNED_ON = "módulo %s activado (puedes desactivarlo en /hk).",
 
   TRAIN_TITLE = "Entrenamiento",
   TRAIN_NOW = "Puedes aprender ya",
@@ -81,6 +130,7 @@ HK.Locale.Register("esES", {
   WAY_NO_POSITION = "sin posición aquí",
   WAY_OTHER_MAP = "el punto de ruta está en otro mapa",
   WAY_YARDS = "%d m",
+  WAY_UNIT_PER_YARD = "0.9144",
   WAY_PERCENT = "%.1f%% del mapa",
   WAY_COMBAT = "la flecha aparece al salir de combate.",
   WAY_NONE = "no hay ningún punto de ruta.",
@@ -92,10 +142,11 @@ HK.Locale.Register("deDE", {
   MOD_PROFESSIONS = "Berufe",
   MOD_PROFESSIONS_DESC = "Merkt sich die Rezepte jedes Berufsfensters, das du öffnest. Zeigt, welche Reagenzien du hast und brauchst (Taschen und Bank) und wie oft du es jetzt herstellen kannst.",
   MOD_WAYPOINT = "Wegpunkt",
-  MOD_WAYPOINT_DESC = "Gib /hk way 45.2 67.8 ein und ein Pfeil zeigt dir diesen Punkt auf deiner aktuellen Karte, mit Entfernung in Metern und Laufzeit. Er verschwindet bei Ankunft von selbst.",
+  MOD_WAYPOINT_DESC = "Gib /hk way 45.2 67.8 ein und ein Pfeil zeigt dir diesen Punkt auf deiner aktuellen Karte, mit Entfernung in Metern (aus den Yards des Spiels umgerechnet) und Laufzeit. Er verschwindet bei Ankunft von selbst.",
 
   ADV_GOLD = "g", ADV_SILVER = "s", ADV_COPPER = "k",
   ADV_COMBAT = "das Fenster öffnet sich nach dem Kampf.",
+  ADV_TURNED_ON = "Modul %s eingeschaltet (in /hk wieder ausschaltbar).",
 
   TRAIN_TITLE = "Ausbildung",
   TRAIN_NOW = "Jetzt erlernbar",
@@ -123,6 +174,7 @@ HK.Locale.Register("deDE", {
   WAY_NO_POSITION = "keine Position hier",
   WAY_OTHER_MAP = "der Wegpunkt liegt auf einer anderen Karte",
   WAY_YARDS = "%d m",
+  WAY_UNIT_PER_YARD = "0.9144",
   WAY_PERCENT = "%.1f%% der Karte",
   WAY_COMBAT = "der Pfeil erscheint nach dem Kampf.",
   WAY_NONE = "kein Wegpunkt gesetzt.",

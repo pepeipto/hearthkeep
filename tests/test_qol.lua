@@ -122,6 +122,40 @@ test("QoL.XPGain counts a level-up as the rest of the old level plus the new XP"
   eq(HK.QoL.XPGain(nil, 1000, 50), 0)
 end)
 
+test("QoL.XPGain sees a level-up from the stored level even when the new XP is higher", function()
+  local HK = boot()
+  local gain, level = HK.QoL.XPGain(100, 1000, 300, 10, 11, 1200)
+  eq(gain, 1200)
+  eq(level, 11)
+  gain, level = HK.QoL.XPGain(100, 1000, 150, 10, 10, 1000)
+  eq(gain, 50)
+  eq(level, 10)
+  -- Two levels in one reward: the level in between counts with the new maximum.
+  eq((HK.QoL.XPGain(100, 1000, 300, 10, 12, 1400)), 900 + 1400 + 300)
+  -- The level reading lags behind the XP: the drop still counts once, and the level
+  -- returned is already the new one, so the late level reading is not a second level-up.
+  gain, level = HK.QoL.XPGain(900, 1000, 50, 10, 10, 1200)
+  eq(gain, 150)
+  eq(level, 11)
+  eq((HK.QoL.XPGain(50, 1200, 80, level, 11, 1200)), 30)
+end)
+
+test("XP and Loot count a quest that crosses a whole level with more XP than before", function()
+  local p = xpPlayer({ xp = 100, max = 1000, rested = 0, level = 10 })
+  local HK = boot()
+  HK:EnableModule("XP")
+  HK:EnableModule("Loot")
+  p.xp, p.max = 300, 1200
+  Stub.setPlayer({ level = 11 })
+  Stub.fire("PLAYER_XP_UPDATE", "player")
+  eq(mod(HK, "XP").state.gained, 1200)
+  eq(mod(HK, "Loot").state.xp, 1200)
+  p.xp = 400
+  Stub.fire("PLAYER_XP_UPDATE", "player")
+  eq(mod(HK, "XP").state.gained, 1300)
+  eq(mod(HK, "Loot").state.xp, 1300)
+end)
+
 test("QoL.Rate is per hour and measures at least one minute", function()
   local HK = boot()
   eq(HK.QoL.Rate(600, 3600), 600)
@@ -473,6 +507,87 @@ test("Vendor does nothing in combat or while off", function()
   HK:EnableModule("Vendor")
   Stub.inCombat = true
   Stub.fire("MERCHANT_SHOW")
+  Stub.flushTimers()
+  eq(#sold, 0)
+end)
+
+test("Vendor counts the copper of the greys just sold when deciding the repair", function()
+  local HK = boot()
+  local V = mod(HK, "Vendor")
+  eq(V.Budget(1000, 1000, 6000), 7000)
+  eq(V.Budget(7000, 1000, 6000), 7000, "money already arrived is not counted twice")
+  eq(V.Budget(8000, 1000, 6000), 8000)
+  eq(V.Budget(nil, 1000, 6000), nil)
+  eq(V.Budget(1000, nil, 6000), 1000)
+  -- In game: 10s on hand, three greys worth 20s each, repair 50s. GetMoney() still says
+  -- 10s when the repair is decided.
+  setBags(greyBags(3), prices(3, 2000))
+  local repairs = {}
+  CanMerchantRepair = function() return true end
+  GetRepairAllCost = function() return 5000, true end
+  RepairAllItems = function(guild) repairs[#repairs + 1] = guild end
+  Stub.setPlayer({ money = 1000 })
+  HK:EnableModule("Vendor")
+  Stub.fire("MERCHANT_SHOW")
+  Stub.flushTimers()
+  eq(repairs, { false })
+  eq(lastPrint(), "Hearthkeep: sold 3 grey items for 60s; repaired for 50s.")
+end)
+
+test("Vendor never repairs with the merchant closed", function()
+  local HK = boot()
+  local repairs = {}
+  CanMerchantRepair = function() return true end
+  GetRepairAllCost = function() return 5000, true end
+  RepairAllItems = function(guild) repairs[#repairs + 1] = guild end
+  Stub.setPlayer({ money = 100000 })
+  HK:EnableModule("Vendor")
+  local V = mod(HK, "Vendor")
+  eq(V.Repair(), nil)
+  eq(#repairs, 0)
+end)
+
+test("Vendor starts after combat when the merchant opened in combat", function()
+  local sold = setBags(greyBags(2), prices(2, 1))
+  local HK = boot()
+  HK:EnableModule("Vendor")
+  Stub.inCombat = true
+  Stub.fire("MERCHANT_SHOW")
+  Stub.flushTimers()
+  eq(#sold, 0)
+  Stub.inCombat = false
+  Stub.fire("PLAYER_REGEN_ENABLED")
+  Stub.flushTimers()
+  eq(#sold, 2)
+  eq(lastPrint(), "Hearthkeep: sold 2 grey items for 2c.")
+end)
+
+test("Vendor carries on after combat with a run combat interrupted, once", function()
+  local sold = setBags(greyBags(30), prices(30, 1))
+  local HK = boot()
+  HK:EnableModule("Vendor")
+  Stub.fire("MERCHANT_SHOW")
+  eq(#sold, 12)
+  Stub.inCombat = true
+  Stub.flushTimers()
+  eq(#sold, 12)
+  Stub.inCombat = false
+  Stub.fire("PLAYER_REGEN_ENABLED")
+  Stub.fire("PLAYER_REGEN_ENABLED")
+  Stub.flushTimers()
+  eq(#sold, 30)
+  eq(lastPrint(), "Hearthkeep: sold 30 grey items for 30c.")
+end)
+
+test("Vendor does not resume after combat once the merchant closed", function()
+  local sold = setBags(greyBags(30), prices(30, 1))
+  local HK = boot()
+  HK:EnableModule("Vendor")
+  Stub.inCombat = true
+  Stub.fire("MERCHANT_SHOW")
+  Stub.fire("MERCHANT_CLOSED")
+  Stub.inCombat = false
+  Stub.fire("PLAYER_REGEN_ENABLED")
   Stub.flushTimers()
   eq(#sold, 0)
 end)

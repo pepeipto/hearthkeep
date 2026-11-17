@@ -184,36 +184,77 @@ function Training.ReadServices()
   return list
 end
 
--- Runs fn with every trainer filter switched on, then puts the filters back.
-local function withAllFilters(fn)
+-- The trainer list's headers, for HK.Adventure.WithHeadersExpanded.
+local HEADERS = {
+  count = function()
+    local r = call("GetNumTrainerServices", _G.GetNumTrainerServices)
+    return r and num(r[2])
+  end,
+  header = function(i)
+    local info = call("GetTrainerServiceInfo", _G.GetTrainerServiceInfo, i)
+    if not info then return nil end
+    local name, category, expanded = str(info[2]), info[4], info[5]
+    if secret(category) or secret(expanded) then return nil end
+    return name, category == "header", expanded and expanded ~= 0
+  end,
+}
+
+-- Runs fn with every trainer filter switched on and every header expanded, then puts
+-- filters and headers back. Returns fn's result (nil on error) and whether anything
+-- in the trainer window was changed (each change fires TRAINER_UPDATE).
+local function withEverything(fn)
   local get, set = _G.GetTrainerServiceTypeFilter, _G.SetTrainerServiceTypeFilter
-  if type(get) ~= "function" or type(set) ~= "function" then return fn() end
   local turnedOn = {}
-  for _, filter in ipairs(FILTERS) do
-    local r = call("GetTrainerServiceTypeFilter", get, filter)
-    if r and not secret(r[2]) then
-      local on = r[2] and r[2] ~= 0
-      if not on and call("SetTrainerServiceTypeFilter", set, filter, 1) then
-        turnedOn[#turnedOn + 1] = filter
+  if type(get) == "function" and type(set) == "function" then
+    for _, filter in ipairs(FILTERS) do
+      local r = call("GetTrainerServiceTypeFilter", get, filter)
+      if r and not secret(r[2]) then
+        local on = r[2] and r[2] ~= 0
+        if not on and call("SetTrainerServiceTypeFilter", set, filter, 1) then
+          turnedOn[#turnedOn + 1] = filter
+        end
       end
     end
   end
-  local ok, result = pcall(fn)
+  local expand, collapse = _G.ExpandTrainerSkillLine, _G.CollapseTrainerSkillLine
+  local spec = { count = HEADERS.count, header = HEADERS.header }
+  if type(expand) == "function" and type(collapse) == "function" then
+    spec.expand = function() return call("ExpandTrainerSkillLine", expand, 0) ~= nil end
+    spec.collapse = function(i) call("CollapseTrainerSkillLine", collapse, i) end
+  end
+  local ok, result, expanded = HK.Adventure.WithHeadersExpanded(spec, fn)
   if not ok then HK.Diag.Record(NAME, "read", result) end
   for _, filter in ipairs(turnedOn) do call("SetTrainerServiceTypeFilter", set, filter, 0) end
-  return ok and result or nil
+  return ok and result or nil, expanded or #turnedOn > 0
 end
 
 local busy = false
 
--- full: also open every filter (on TRAINER_SHOW only, so changing filters, which fires
--- TRAINER_UPDATE, cannot loop).
+-- Seconds after our own filter and header changes during which TRAINER_UPDATE is not
+-- read again: those changes fire TRAINER_UPDATE themselves (now or a frame later), and
+-- reading again would change them again, forever. A purchase (BuyTrainerService) marks
+-- the list dirty, so its update is read even inside that time.
+Training.QUIET = 1
+Training.quietUntil = 0
+Training.dirty = false
+Training.open = false
+
+local function now()
+  local r = call("GetTime", _G.GetTime)
+  return r and num(r[2]) or 0
+end
+
+-- full: read with every filter on and every header expanded. Otherwise only what the
+-- window shows now is read.
 function Training.Record(full)
   if busy or isTradeskillTrainer() then return false end
   busy = true
-  local runner = full and withAllFilters or function(fn) return fn() end
-  local ok, list = pcall(runner, Training.ReadServices)
+  Training.dirty = false
+  local runner = function(fn) return fn(), false end
+  if full then runner = withEverything end
+  local ok, list, changed = pcall(runner, Training.ReadServices)
   busy = false
+  if ok and changed then Training.quietUntil = now() + Training.QUIET end
   if not ok then
     HK.Diag.Record(NAME, "record", list)
     return false
@@ -225,6 +266,16 @@ function Training.Record(full)
   Training.Merge(HK.CharDB(NAME), list, zone and str(zone[2]), npc and str(npc[2]), now and num(now[2]))
   Training.Refresh()
   return true
+end
+
+-- TRAINER_UPDATE (a purchase, a filter or header change): read everything again a
+-- moment later, once per burst, unless it is the echo of our own changes.
+function Training.OnUpdate()
+  if busy or not Training.open then return end
+  if now() < Training.quietUntil and not Training.dirty then return end
+  HK:Debounce("HKTrainingUpdate", 0.2, function()
+    if HK:IsModuleEnabled(NAME) and Training.open then Training.Record(true) end
+  end)
 end
 
 function Training.CheckLevelUp(newLevel)
@@ -294,7 +345,7 @@ function Training.Refresh()
 end
 
 function Training.Open()
-  if not HK:IsModuleEnabled(NAME) then HK:EnableModule(NAME) end
+  HK.Adventure.EnsureOn(NAME)
   if not Training.frame then
     if InCombatLockdown() then
       print("Hearthkeep: " .. HK.L.ADV_COMBAT)
@@ -326,8 +377,16 @@ Training.command = "train"
 function Training.OnEnable()
   if registered then return end
   registered = true
-  HK:RegisterEvent("TRAINER_SHOW", function() Training.Record(true) end, NAME)
-  HK:RegisterEvent("TRAINER_UPDATE", function() Training.Record(false) end, NAME)
+  HK:RegisterEvent("TRAINER_SHOW", function()
+    Training.open = true
+    Training.Record(true)
+  end, NAME)
+  HK:RegisterEvent("TRAINER_CLOSED", function() Training.open = false end, NAME)
+  HK:RegisterEvent("TRAINER_UPDATE", function() Training.OnUpdate() end, NAME)
+  if type(_G.hooksecurefunc) == "function" and type(_G.BuyTrainerService) == "function" then
+    local ok, err = pcall(_G.hooksecurefunc, "BuyTrainerService", function() Training.dirty = true end)
+    if not ok then HK.Diag.Record(NAME, "hooksecurefunc", err) end
+  end
   HK:RegisterEvent("PLAYER_LEVEL_UP", function(_, level) Training.CheckLevelUp(level) end, NAME)
 end
 

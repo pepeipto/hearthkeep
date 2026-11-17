@@ -4,7 +4,8 @@ local QoL = HK.QoL
 -- Vendor: when a merchant window opens, sells every grey (poor quality) item, at most
 -- BATCH per step with a short pause between steps, then repairs. Each slot is read again
 -- right before it is sold, so only an item that is still grey is ever sold. Stops when
--- the merchant closes. One summary line in chat.
+-- the merchant closes. Combat pauses the run; it carries on when combat ends if the
+-- merchant is still open. One summary line in chat.
 local NAME = "Vendor"
 
 local Vendor = {
@@ -79,7 +80,21 @@ local function sell(item)
   return true
 end
 
-function Vendor.Repair()
+-- Money to decide the repair with. The copper of greys just sold reaches GetMoney() a
+-- moment later, so the expected amount is the money before the run plus what the run
+-- sold; whichever is higher is used, so money that already arrived is not counted twice.
+function Vendor.Budget(money, startMoney, soldValue)
+  if type(money) ~= "number" then return nil end
+  if type(startMoney) == "number" and type(soldValue) == "number" then
+    local expected = startMoney + soldValue
+    if expected > money then return expected end
+  end
+  return money
+end
+
+-- run (optional): the selling run that just ended ({ startMoney, value }).
+function Vendor.Repair(run)
+  if not Vendor.state.merchantOpen then return nil end
   if not QoL.Call(NAME, "CanMerchantRepair", _G.CanMerchantRepair) then return nil end
   local cost, canRepair = QoL.Call(NAME, "GetRepairAllCost", _G.GetRepairAllCost)
   cost = QoL.Num(cost)
@@ -87,6 +102,7 @@ function Vendor.Repair()
   local wantGuild = settings().guildRepair
   local guildAllowed = wantGuild and QoL.Call(NAME, "CanGuildBankRepair", _G.CanGuildBankRepair) == true
   local money = QoL.Num(QoL.Call(NAME, "GetMoney", _G.GetMoney))
+  if run then money = Vendor.Budget(money, run.startMoney, run.value) end
   local plan = Vendor.RepairPlan(cost, canRepair, money, wantGuild, guildAllowed)
   if plan == "guild" or plan == "self" then
     local repairAll = _G.RepairAllItems
@@ -107,12 +123,15 @@ end
 
 local function finish(run)
   Vendor.state.run = nil
-  local cost, plan = Vendor.Repair()
+  local cost, plan = Vendor.Repair(run)
   local line = Vendor.Summary(run.sold, run.value, cost, plan)
   if line then QoL.Say(line) end
 end
 
+-- A run stopped by combat stays in Vendor.state.run (not waiting on a timer) and is
+-- picked up again by Vendor.Resume when combat ends.
 local function step(run)
+  run.waiting = false
   if not active(run) then return end
   local done = 0
   while done < Vendor.BATCH and run.index <= #run.queue do
@@ -125,6 +144,7 @@ local function step(run)
     end
   end
   if run.index <= #run.queue then
+    run.waiting = true
     C_Timer.After(Vendor.DELAY, function()
       local ok, err = pcall(step, run)
       if not ok then HK.Diag.Record(NAME, "step", err) end
@@ -137,15 +157,36 @@ end
 function Vendor.Start()
   local state = Vendor.state
   state.merchantOpen = true
-  if QoL.InCombat() then return end
+  if QoL.InCombat() then
+    state.pending = true
+    return
+  end
+  state.pending = false
   state.runId = state.runId + 1
-  local run = { id = state.runId, queue = Vendor.Sellable(QoL.Greys(NAME)), index = 1, sold = 0, value = 0 }
+  local run = {
+    id = state.runId, queue = Vendor.Sellable(QoL.Greys(NAME)), index = 1, sold = 0, value = 0,
+    startMoney = QoL.Num(QoL.Call(NAME, "GetMoney", _G.GetMoney)),
+  }
   state.run = run
   step(run)
 end
 
+-- After combat: carries on with a run that combat interrupted, or starts the one that
+-- combat prevented, while the merchant is still open.
+function Vendor.Resume()
+  local state = Vendor.state
+  if not state.merchantOpen or QoL.InCombat() or not HK:IsModuleEnabled(NAME) then return end
+  local run = state.run
+  if run then
+    if not run.waiting then step(run) end
+  elseif state.pending then
+    Vendor.Start()
+  end
+end
+
 function Vendor.Stop()
   Vendor.state.merchantOpen = false
+  Vendor.state.pending = false
   Vendor.state.run = nil
 end
 
@@ -153,6 +194,7 @@ function Vendor.OnEnable()
   QoL.Events(NAME, Vendor.state, {
     MERCHANT_SHOW = function() Vendor.Start() end,
     MERCHANT_CLOSED = function() Vendor.Stop() end,
+    PLAYER_REGEN_ENABLED = function() Vendor.Resume() end,
   })
 end
 

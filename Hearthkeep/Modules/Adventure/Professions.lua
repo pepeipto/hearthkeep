@@ -33,16 +33,27 @@ end
 
 -- The two window families share their shape; only names and the position of the
 -- difficulty in the info call differ.
+-- difficulty: position of the type ("header", "optimal", ...) in the info call;
+-- isExpanded comes two places later.
 Professions.TRADE = {
   kind = "trade", count = "GetNumTradeSkills", info = "GetTradeSkillInfo", difficulty = 2,
   numReagents = "GetTradeSkillNumReagents", reagent = "GetTradeSkillReagentInfo",
   reagentLink = "GetTradeSkillReagentItemLink", itemLink = "GetTradeSkillItemLink",
+  expand = "ExpandTradeSkillSubClass", collapse = "CollapseTradeSkillSubClass",
 }
 Professions.CRAFT = {
   kind = "craft", count = "GetNumCrafts", info = "GetCraftInfo", difficulty = 3,
   numReagents = "GetCraftNumReagents", reagent = "GetCraftReagentInfo",
   reagentLink = "GetCraftReagentItemLink", itemLink = "GetCraftItemLink",
+  expand = "ExpandCraftSkillLine", collapse = "CollapseCraftSkillLine",
 }
+
+-- Which profession windows are open now (set by the SHOW / CLOSE events). A delayed
+-- update after the window closed must not read: the client then answers with an
+-- empty list and a placeholder name ("UNKNOWN").
+Professions.open = { trade = false, craft = false }
+Professions.QUIET = 1
+Professions.quietUntil = { trade = 0, craft = 0 }
 
 local HEADERS = { header = true, subheader = true }
 
@@ -129,25 +140,34 @@ end
 
 -- Game reads ------------------------------------------------------------------------
 
+-- The profession of the open window. The craft window without a skill line is the
+-- hunter's Beast Training, which is not a profession: nil, so it is skipped.
 local function professionName(api)
+  local r
   if api.kind == "trade" then
-    local r = call("GetTradeSkillLine", _G.GetTradeSkillLine)
-    return r and str(r[2])
+    r = call("GetTradeSkillLine", _G.GetTradeSkillLine)
+  else
+    r = call("GetCraftDisplaySkillLine", _G.GetCraftDisplaySkillLine)
   end
-  local r = call("GetCraftDisplaySkillLine", _G.GetCraftDisplaySkillLine)
   local name = r and str(r[2])
-  if name then return name end
-  r = call("GetCraftName", _G.GetCraftName)
-  return r and str(r[2])
+  if not name or name == "UNKNOWN" then return nil end
+  return name
+end
+
+-- A real profession name for a list of n lines, or nil (nothing to record).
+function Professions.ValidName(name, count)
+  if type(name) ~= "string" or name == "" or name == "UNKNOWN" then return nil end
+  if type(count) ~= "number" or count <= 0 then return nil end
+  return name
 end
 
 -- Returns the profession name and a list of recipes, or nil when the window's API is
--- missing.
+-- missing, the list is empty or the window is not a profession.
 function Professions.Read(api)
   local count = call(api.count, _G[api.count])
   count = count and num(count[2])
   if not count then return nil end
-  local name = professionName(api)
+  local name = Professions.ValidName(professionName(api), count)
   if not name then return nil end
   local recipes = {}
   for i = 1, count do
@@ -183,8 +203,50 @@ function Professions.Merge(db, name, recipes, when)
   return profession
 end
 
+local function now()
+  local r = call("GetTime", _G.GetTime)
+  return r and num(r[2]) or 0
+end
+
+-- The window's headers, for HK.Adventure.WithHeadersExpanded.
+local function headerSpec(api)
+  local spec = {
+    count = function()
+      local r = call(api.count, _G[api.count])
+      return r and num(r[2])
+    end,
+    header = function(i)
+      local info = call(api.info, _G[api.info], i)
+      if not info then return nil end
+      local kind, expanded = info[api.difficulty + 1], info[api.difficulty + 3]
+      if secret(kind) or secret(expanded) then return nil end
+      return str(info[2]), HEADERS[kind or ""] or false, expanded and expanded ~= 0
+    end,
+  }
+  local expand, collapse = _G[api.expand], _G[api.collapse]
+  if type(expand) == "function" and type(collapse) == "function" then
+    spec.expand = function() return call(api.expand, expand, 0) ~= nil end
+    spec.collapse = function(i) call(api.collapse, collapse, i) end
+  end
+  return spec
+end
+
+local busy = false
+
+-- Reads the open window with every header expanded (then collapsed back) and stores it.
 function Professions.Record(api)
-  local name, recipes = Professions.Read(api)
+  if busy or not Professions.open[api.kind] then return false end
+  busy = true
+  local ok, result, changed = HK.Adventure.WithHeadersExpanded(headerSpec(api), function()
+    return { Professions.Read(api) }
+  end)
+  busy = false
+  if changed then Professions.quietUntil[api.kind] = now() + Professions.QUIET end
+  if not ok then
+    HK.Diag.Record(NAME, "read", result)
+    return false
+  end
+  local name, recipes = result[1], result[2]
   if not name then return false end
   local now = call("GetServerTime", _G.GetServerTime)
   Professions.Merge(HK.CharDB(NAME), name, recipes, now and num(now[2]))
@@ -288,7 +350,7 @@ function Professions.Select(name)
 end
 
 function Professions.Open()
-  if not HK:IsModuleEnabled(NAME) then HK:EnableModule(NAME) end
+  HK.Adventure.EnsureOn(NAME)
   if not Professions.frame then
     if InCombatLockdown() then
       print("Hearthkeep: " .. HK.L.ADV_COMBAT)
@@ -324,21 +386,25 @@ function Professions.OnEnable()
     local ok, err = pcall(Professions.Record, api)
     if not ok then HK.Diag.Record(NAME, "record", err) end
   end
-  local function trade() guarded(Professions.TRADE) end
-  local function craft() guarded(Professions.CRAFT) end
-  HK:RegisterEvent("TRADE_SKILL_SHOW", trade, NAME)
-  HK:RegisterEvent("TRADE_SKILL_UPDATE", function()
-    HK:Debounce("HKProfessionsTrade", 0.3, function()
-      if HK:IsModuleEnabled(NAME) then trade() end
-    end)
-  end, NAME)
-  if type(_G.GetNumCrafts) == "function" then
-    HK:RegisterEvent("CRAFT_SHOW", craft, NAME)
-    HK:RegisterEvent("CRAFT_UPDATE", function()
-      HK:Debounce("HKProfessionsCraft", 0.3, function()
-        if HK:IsModuleEnabled(NAME) then craft() end
+  -- One window family: SHOW opens and reads, CLOSE closes, UPDATE reads again a moment
+  -- later while the window is still open, ignoring the echo of our own header changes.
+  local function watch(api, show, close, update, key)
+    HK:RegisterEvent(show, function()
+      Professions.open[api.kind] = true
+      guarded(api)
+    end, NAME)
+    HK:RegisterEvent(close, function() Professions.open[api.kind] = false end, NAME)
+    HK:RegisterEvent(update, function()
+      if busy or not Professions.open[api.kind] then return end
+      if now() < Professions.quietUntil[api.kind] then return end
+      HK:Debounce(key, 0.3, function()
+        if HK:IsModuleEnabled(NAME) and Professions.open[api.kind] then guarded(api) end
       end)
     end, NAME)
+  end
+  watch(Professions.TRADE, "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_UPDATE", "HKProfessionsTrade")
+  if type(_G.GetNumCrafts) == "function" then
+    watch(Professions.CRAFT, "CRAFT_SHOW", "CRAFT_CLOSE", "CRAFT_UPDATE", "HKProfessionsCraft")
   end
 end
 

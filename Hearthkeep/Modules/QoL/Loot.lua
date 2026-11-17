@@ -121,7 +121,8 @@ end
 
 local function readXP()
   return QoL.Num(QoL.Call(NAME, "UnitXP", _G.UnitXP, "player")),
-    QoL.Num(QoL.Call(NAME, "UnitXPMax", _G.UnitXPMax, "player"))
+    QoL.Num(QoL.Call(NAME, "UnitXPMax", _G.UnitXPMax, "player")),
+    QoL.Num(QoL.Call(NAME, "UnitLevel", _G.UnitLevel, "player"))
 end
 
 local function readMoney()
@@ -173,15 +174,17 @@ function Loot.OnMoney()
 end
 
 function Loot.OnXP()
-  local xp, max = readXP()
+  local xp, max, level = readXP()
   local state = Loot.state
   if xp and state.lastXP then
-    local gain = QoL.XPGain(state.lastXP, state.lastMax, xp)
+    local gain
+    gain, level = QoL.XPGain(state.lastXP, state.lastMax, xp, state.lastLevel, level, max)
     if gain > 0 then
       state.xp = state.xp + gain
       add("+" .. HK.L.LOOT_XP:format(QoL.FormatNumber(gain)))
     end
   end
+  if level then state.lastLevel = level end
   if xp then state.lastXP = xp end
   if max then state.lastMax = max end
 end
@@ -192,7 +195,7 @@ function Loot.Reset()
   state.money, state.items, state.xp = 0, 0, 0
   state.start = now()
   state.lastMoney = readMoney()
-  state.lastXP, state.lastMax = readXP()
+  state.lastXP, state.lastMax, state.lastLevel = readXP()
 end
 
 function Loot.Report()

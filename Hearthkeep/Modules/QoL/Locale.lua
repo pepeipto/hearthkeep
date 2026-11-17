@@ -49,13 +49,46 @@ function QoL.InCombat()
   return type(InCombatLockdown) == "function" and InCombatLockdown() and true or false
 end
 
--- XP gained between two readings. A smaller value than before means a level-up: the
--- rest of the old level plus what was earned in the new one.
-function QoL.XPGain(prevXP, prevMax, xp)
-  if type(prevXP) ~= "number" or type(xp) ~= "number" then return 0 end
-  if xp >= prevXP then return xp - prevXP end
-  if type(prevMax) ~= "number" or prevMax < prevXP then return xp end
-  return (prevMax - prevXP) + xp
+-- XP gained between two readings ({ xp, max, level } before and after). Returns the
+-- gain and the level the new reading belongs to (store it for the next call).
+--
+-- A level-up is seen from the stored level (prevLevel < level), so a quest that crosses
+-- a whole level and leaves more XP than before still counts the full gain. When the
+-- levels are unknown or the level reading lags behind the XP, a smaller XP value than
+-- before is taken as one level-up.
+--
+-- Gain over a level-up = (prevMax - prevXP) + xp. When more than one level is crossed
+-- the client only tells the maximum of the old and of the new level, so each level in
+-- between is counted with the new level's maximum (the old one's when the new one is
+-- unknown). This is an approximation: it is a little high, as the maximum grows with
+-- the level, and it only happens for very large single rewards.
+function QoL.XPGain(prevXP, prevMax, xp, prevLevel, level, max)
+  local knownPrev = type(prevLevel) == "number"
+  local known = type(level) == "number"
+  if type(prevXP) ~= "number" or type(xp) ~= "number" then
+    return 0, known and level or prevLevel
+  end
+  local ups = 0
+  if knownPrev and known and level > prevLevel then
+    ups = level - prevLevel
+  elseif xp < prevXP then
+    ups = 1
+  end
+  local newLevel = known and level or nil
+  if knownPrev then
+    local inferred = prevLevel + ups
+    if not newLevel or inferred > newLevel then newLevel = inferred end
+  end
+  if ups == 0 then return xp - prevXP, newLevel end
+  local rest = 0
+  if type(prevMax) == "number" and prevMax >= prevXP then rest = prevMax - prevXP end
+  local between = 0
+  if type(max) == "number" and max > 0 then
+    between = max
+  elseif type(prevMax) == "number" and prevMax > 0 then
+    between = prevMax
+  end
+  return rest + (ups - 1) * between + xp, newLevel
 end
 
 -- Amount per hour. Below one minute of data the rate is measured over a full minute so a

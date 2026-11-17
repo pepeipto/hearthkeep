@@ -110,6 +110,137 @@ test("TRAINER_SHOW records every service with all filters on, then restores them
   eq(#calls, 4)
 end)
 
+test("a spell bought at the trainer is updated to used on TRAINER_UPDATE, all filters read", function()
+  local HK = boot()
+  HK:EnableModule("Training")
+  Stub.setPlayer({ level = 12 })
+  local services = {
+    { "Rend", "Rank 2", "available", 10, 600 },
+    { "Hamstring", "Rank 1", "used", 8, 100 },
+  }
+  local filters, calls = trainer(services, { available = 1 })
+  Stub.fire("TRAINER_SHOW")
+  eq(HK.CharDB("Training").services["Rend|Rank 2"].category, "available")
+  eq(#calls, 4)
+  -- The echo of our own filter changes (same moment) is not read again: no loop.
+  Stub.fire("TRAINER_UPDATE")
+  Stub.flushTimers()
+  eq(#calls, 4)
+  -- The player buys Rend: the "used" filter is off, so only a read with all filters on
+  -- sees it.
+  services[1][3] = "used"
+  Stub.time = Stub.time + 5
+  Stub.fire("TRAINER_UPDATE")
+  Stub.flushTimers()
+  eq(HK.CharDB("Training").services["Rend|Rank 2"].category, "used")
+  eq(#calls, 8)
+  eq(filters.used, nil)
+  local T = HK:ModuleInfo("Training")
+  eq(#T.Plan(HK.CharDB("Training").services, 12).now, 0)
+end)
+
+test("a purchase is read even right after our own filter changes", function()
+  local HK = boot()
+  local hooks = {}
+  BuyTrainerService = function() end
+  hooksecurefunc = function(name, fn) hooks[name] = fn end
+  HK:EnableModule("Training")
+  local services = { { "Rend", "Rank 2", "available", 10, 600 } }
+  trainer(services, { available = 1 })
+  Stub.fire("TRAINER_SHOW")
+  truthy(hooks.BuyTrainerService, "purchase hooked")
+  services[1][3] = "used"
+  hooks.BuyTrainerService(1)
+  Stub.fire("TRAINER_UPDATE")
+  Stub.flushTimers()
+  eq(HK.CharDB("Training").services["Rend|Rank 2"].category, "used")
+end)
+
+test("TRAINER_UPDATE does nothing once the trainer window is closed", function()
+  local HK = boot()
+  HK:EnableModule("Training")
+  local services = { { "Rend", "Rank 2", "available", 10, 600 } }
+  trainer(services)
+  Stub.fire("TRAINER_SHOW")
+  Stub.fire("TRAINER_CLOSED")
+  services[1][3] = "used"
+  Stub.time = Stub.time + 5
+  Stub.fire("TRAINER_UPDATE")
+  Stub.flushTimers()
+  eq(HK.CharDB("Training").services["Rend|Rank 2"].category, "available")
+end)
+
+test("a filter change that fires TRAINER_UPDATE at once does not loop", function()
+  local HK = boot()
+  HK:EnableModule("Training")
+  local filters, calls = trainer(SERVICES, { available = 1 })
+  local set = SetTrainerServiceTypeFilter
+  SetTrainerServiceTypeFilter = function(kind, on)
+    set(kind, on)
+    Stub.fire("TRAINER_UPDATE")
+  end
+  Stub.fire("TRAINER_SHOW")
+  Stub.flushTimers()
+  eq(#calls, 4)
+  eq(filters.used, nil)
+end)
+
+-- A trainer whose headers can be collapsed: entries after a collapsed header are hidden.
+local function headedTrainer(rows)
+  local calls = {}
+  local function visible()
+    local list, hidden = {}, false
+    for _, row in ipairs(rows) do
+      if row.header then
+        list[#list + 1] = row
+        hidden = not row.expanded
+      elseif not hidden then
+        list[#list + 1] = row
+      end
+    end
+    return list
+  end
+  GetNumTrainerServices = function() return #visible() end
+  GetTrainerServiceInfo = function(i)
+    local row = visible()[i]
+    if row.header then return row.name, nil, "header", row.expanded and 1 or nil end
+    return row.name, row.rank, row.category
+  end
+  GetTrainerServiceLevelReq = function(i) return visible()[i].level end
+  GetTrainerServiceCost = function(i) return visible()[i].cost end
+  ExpandTrainerSkillLine = function(i)
+    calls[#calls + 1] = "expand " .. i
+    for _, row in ipairs(rows) do if row.header then row.expanded = true end end
+  end
+  CollapseTrainerSkillLine = function(i)
+    calls[#calls + 1] = "collapse " .. visible()[i].name
+    visible()[i].expanded = false
+  end
+  return calls
+end
+
+test("Training expands collapsed headers to read them, then collapses them again", function()
+  local HK = boot()
+  HK:EnableModule("Training")
+  local rows = {
+    { header = true, name = "Arms", expanded = true },
+    { name = "Rend", rank = "Rank 2", category = "available", level = 10, cost = 600 },
+    { header = true, name = "Fury", expanded = false },
+    { name = "Bloodrage", category = "available", level = 10, cost = 100 },
+    { header = true, name = "Protection", expanded = false },
+    { name = "Taunt", category = "unavailable", level = 10, cost = 100 },
+  }
+  local calls = headedTrainer(rows)
+  Stub.fire("TRAINER_SHOW")
+  local services = HK.CharDB("Training").services
+  truthy(services["Bloodrage|"], "read under a collapsed header")
+  truthy(services["Taunt|"], "read under a collapsed header")
+  eq(calls, { "expand 0", "collapse Protection", "collapse Fury" })
+  eq(rows[1].expanded, true)
+  eq(rows[3].expanded, false)
+  eq(rows[5].expanded, false)
+end)
+
 test("Training records nothing while the module is off", function()
   local HK = boot()
   trainer(SERVICES)
@@ -268,6 +399,98 @@ test("CRAFT_SHOW records Enchanting from the craft window", function()
   local recipe = HK.CharDB("Professions").Enchanting.recipes["Enchant Bracer - Minor Health"]
   eq(recipe.difficulty, "optimal")
   eq(recipe.reagents[1].name, "Strange Dust")
+end)
+
+test("a profession update after the window closed records no phantom profession", function()
+  local HK = boot()
+  HK:EnableModule("Professions")
+  tradeWindow("Tailoring", { { name = "Bolt of Linen Cloth", kind = "trivial", reagents = {} } })
+  Stub.fire("TRADE_SKILL_SHOW")
+  Stub.fire("TRADE_SKILL_UPDATE")
+  -- The window closes before the delayed read; the client now answers with a placeholder.
+  Stub.fire("TRADE_SKILL_CLOSE")
+  tradeWindow("UNKNOWN", {})
+  Stub.time = Stub.time + 5
+  Stub.flushTimers()
+  Stub.fire("TRADE_SKILL_UPDATE")
+  Stub.flushTimers()
+  eq(Stub.printed, {})
+  eq(HK:ModuleInfo("Professions").Names(HK.CharDB("Professions")), { "Tailoring" })
+end)
+
+test("Professions rejects an UNKNOWN or empty profession and an empty list", function()
+  local HK = boot()
+  local P = HK:ModuleInfo("Professions")
+  eq(P.ValidName("Tailoring", 3), "Tailoring")
+  eq(P.ValidName("UNKNOWN", 3), nil)
+  eq(P.ValidName("", 3), nil)
+  eq(P.ValidName(nil, 3), nil)
+  eq(P.ValidName("Tailoring", 0), nil)
+  HK:EnableModule("Professions")
+  tradeWindow("UNKNOWN", { { name = "Something", kind = "trivial" } })
+  Stub.fire("TRADE_SKILL_SHOW")
+  tradeWindow("Tailoring", {})
+  Stub.fire("TRADE_SKILL_SHOW")
+  eq(P.Names(HK.CharDB("Professions")), {})
+end)
+
+test("the hunter's Beast Training craft window is not recorded as a profession", function()
+  local HK = boot()
+  GetNumCrafts = function() return 1 end
+  HK:EnableModule("Professions")
+  GetCraftDisplaySkillLine = function() return nil end
+  GetCraftName = function() return "Beast Training" end
+  GetCraftInfo = function() return "Growl", "Rank 1", "used", 0, true end
+  GetCraftNumReagents = function() return 0 end
+  Stub.fire("CRAFT_SHOW")
+  eq(HK:ModuleInfo("Professions").Names(HK.CharDB("Professions")), {})
+end)
+
+test("Professions expands collapsed recipe headers to read them, then collapses them again", function()
+  local HK = boot()
+  HK:EnableModule("Professions")
+  local rows = {
+    { name = "Cloth", kind = "header", expanded = true },
+    { name = "Bolt of Linen Cloth", kind = "trivial" },
+    { name = "Bags", kind = "header", expanded = false },
+    { name = "Linen Bag", kind = "optimal" },
+  }
+  local calls = {}
+  local function visible()
+    local list, hidden = {}, false
+    for _, row in ipairs(rows) do
+      if row.kind == "header" then
+        list[#list + 1] = row
+        hidden = not row.expanded
+      elseif not hidden then
+        list[#list + 1] = row
+      end
+    end
+    return list
+  end
+  GetTradeSkillLine = function() return "Tailoring", 50, 75 end
+  GetNumTradeSkills = function() return #visible() end
+  GetTradeSkillInfo = function(i)
+    local row = visible()[i]
+    return row.name, row.kind, 0, row.expanded
+  end
+  GetTradeSkillNumReagents = function() return 0 end
+  ExpandTradeSkillSubClass = function(i)
+    calls[#calls + 1] = "expand " .. i
+    for _, row in ipairs(rows) do if row.kind == "header" then row.expanded = true end end
+  end
+  CollapseTradeSkillSubClass = function(i)
+    calls[#calls + 1] = "collapse " .. visible()[i].name
+    visible()[i].expanded = false
+  end
+  Stub.fire("TRADE_SKILL_SHOW")
+  truthy(HK.CharDB("Professions").Tailoring.recipes["Linen Bag"], "read under a collapsed header")
+  eq(calls, { "expand 0", "collapse Bags" })
+  eq(rows[3].expanded, false)
+  -- Our own expand/collapse fires TRADE_SKILL_UPDATE: it is not read again (no loop).
+  Stub.fire("TRADE_SKILL_UPDATE")
+  Stub.flushTimers()
+  eq(#calls, 2)
 end)
 
 test("Professions.Craftable takes the scarcest reagent", function()
@@ -437,6 +660,41 @@ test("Waypoint hides without a map position and shows distance only without faci
   eq(W.last.status, "nopos")
   falsy(W.frame:IsShown())
   truthy(W.current, "kept while the position is unknown")
+end)
+
+test("Waypoint shows metres in Spanish and German and yards in English", function()
+  local HK = boot()
+  local W = HK:ModuleInfo("Waypoint")
+  eq(W.FormatDistance(100), "100 yd")
+  HK.db.settings.language = "esES"
+  eq(W.FormatDistance(100), "91 m")
+  truthy(HK.L.MOD_WAYPOINT_DESC:find("metros", 1, true))
+  HK.db.settings.language = "deDE"
+  eq(W.FormatDistance(1000), "914 m")
+  truthy(HK.L.MOD_WAYPOINT_DESC:find("Metern", 1, true))
+  worldMap()
+  GetPlayerFacing = function() return 0 end
+  SlashCmdList.HEARTHKEEP("way 50 40")
+  eq(W.frame.distance.text, "91 m   0:14")
+end)
+
+test("/hk train, /hk prof and /hk way say once that they turned their module on", function()
+  local HK = boot()
+  HK.db.settings.language = "esES"
+  worldMap()
+  SlashCmdList.HEARTHKEEP("train")
+  truthy(printedContains("módulo Entrenamiento activado"))
+  SlashCmdList.HEARTHKEEP("prof")
+  truthy(printedContains("módulo Profesiones activado"))
+  SlashCmdList.HEARTHKEEP("way 50 40")
+  truthy(printedContains("módulo Punto de ruta activado"))
+  truthy(HK:IsModuleEnabled("Training"))
+  truthy(HK:IsModuleEnabled("Professions"))
+  truthy(HK:IsModuleEnabled("Waypoint"))
+  local count = #Stub.printed
+  SlashCmdList.HEARTHKEEP("train")
+  SlashCmdList.HEARTHKEEP("way clear")
+  eq(#Stub.printed, count + 1, "only the cleared line, no second turned-on line")
 end)
 
 test("Waypoint without the world API shows a percentage of the map", function()

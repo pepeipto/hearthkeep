@@ -98,6 +98,13 @@ function Waypoint.Solve(px, py, tx, ty, sx, sy)
   return result
 end
 
+-- Distance text in the player's language: yards in English, metres (yards x 0.9144)
+-- in Spanish and German. All the maths stays in yards.
+function Waypoint.FormatDistance(yards)
+  local scale = tonumber(HK.L.WAY_UNIT_PER_YARD) or 1
+  return HK.L.WAY_YARDS:format(math.floor(yards * scale + 0.5))
+end
+
 function Waypoint.ETA(yards, speed)
   return yards / (speed or Waypoint.SPEED)
 end
@@ -251,7 +258,7 @@ local function display(state, wp)
   end
   frame.arrow:SetShown(rotated)
   if state.yards then
-    frame.distance:SetText(HK.L.WAY_YARDS:format(math.floor(state.yards + 0.5)) .. "   "
+    frame.distance:SetText(Waypoint.FormatDistance(state.yards) .. "   "
       .. Waypoint.FormatTime(state.eta))
   else
     frame.distance:SetText(HK.L.WAY_PERCENT:format(state.percent))
@@ -351,7 +358,7 @@ function Waypoint.Set(x, y, note)
 end
 
 function Waypoint.Command(args)
-  if not HK:IsModuleEnabled(NAME) then HK:EnableModule(NAME) end
+  HK.Adventure.EnsureOn(NAME)
   args = args or ""
   if args:lower() == "clear" then
     Waypoint.Clear()
