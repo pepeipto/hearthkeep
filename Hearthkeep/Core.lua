@@ -8,9 +8,14 @@ local tokens = {}
 
 HK.loggedIn = false
 
+-- The saved switch wins; before the player ever touches it, the module's own default
+-- applies (modules written before defaults existed are on).
 local function setting(name)
   local db = HK.db
-  return not (db and db.settings and db.settings.modules and db.settings.modules[name] == false)
+  local saved = db and db.settings and db.settings.modules and db.settings.modules[name]
+  if type(saved) == "boolean" then return saved end
+  local entry = modules[name]
+  return not (entry and entry.def.default == false)
 end
 
 local function persist(name, value)
@@ -68,6 +73,51 @@ function HK:DisableModule(name)
     guard(name, "OnDisable", entry.def.OnDisable, entry.def)
   end
   return true
+end
+
+function HK:ModuleInfo(name)
+  local entry = modules[name]
+  return entry and entry.def or nil
+end
+
+HK.PRESETS = { "minimal", "recommended" }
+
+-- Sets every module that declares presets to that preset's state. Modules that declare
+-- none are left as they are. Returns the number of modules changed.
+function HK:ApplyPreset(preset)
+  local valid = false
+  for _, known in ipairs(HK.PRESETS) do if known == preset then valid = true end end
+  if not valid then return nil end
+  local changed = 0
+  for _, name in ipairs(order) do
+    local presets = modules[name].def.presets
+    if type(presets) == "table" and presets[preset] ~= nil then
+      local want = presets[preset] and true or false
+      if want ~= HK:IsModuleEnabled(name) then changed = changed + 1 end
+      if want then HK:EnableModule(name) else HK:DisableModule(name) end
+    end
+  end
+  return changed
+end
+
+-- Per-account and per-character saved tables for a module, created on first use.
+function HK.ModuleDB(name)
+  local db = HK.db
+  if not db then return {} end
+  db.moduleData = type(db.moduleData) == "table" and db.moduleData or {}
+  if type(db.moduleData[name]) ~= "table" then db.moduleData[name] = {} end
+  return db.moduleData[name]
+end
+
+function HK.CharDB(name)
+  local db = HK.db
+  if not db then return {} end
+  db.charData = type(db.charData) == "table" and db.charData or {}
+  local key = HK.Storage and HK.Storage.CharKey() or "default"
+  if type(db.charData[key]) ~= "table" then db.charData[key] = {} end
+  local char = db.charData[key]
+  if type(char[name]) ~= "table" then char[name] = {} end
+  return char[name]
 end
 
 function HK:ModuleNames()

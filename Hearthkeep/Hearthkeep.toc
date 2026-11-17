@@ -15,3 +15,5 @@ Manifest.lua
 Skins.lua
 Version.lua
 Options.lua
+HUD.lua
+Home.lua

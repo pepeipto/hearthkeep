@@ -265,7 +265,7 @@ test("right-click on the minimap button opens a menu with Alts only when Modes i
   local button = Alts.Minimap.Create()
   button.scripts.OnClick(button, "RightButton")
   eq(Alts.Minimap.menu:IsShown(), true)
-  eq(Alts.Minimap.MenuEntries(), { "MENU_ALTS" })
+  eq(Alts.Minimap.MenuEntries(), { "MENU_HOME", "MENU_ALTS" })
 end)
 
 test("the minimap menu lists Modes, Alts and Setup when Modes is loaded and they work", function()
@@ -273,7 +273,7 @@ test("the minimap menu lists Modes, Alts and Setup when Modes is loaded and they
   local Modes = Stub.load("Hearthkeep_Modes")
   local button = Alts.Minimap.Create()
   button.scripts.OnClick(button, "RightButton")
-  eq(Alts.Minimap.MenuEntries(), { "MENU_MODES", "MENU_ALTS", "MENU_SETUP" })
+  eq(Alts.Minimap.MenuEntries(), { "MENU_HOME", "MENU_MODES", "MENU_ALTS", "MENU_SETUP" })
   local modes = Alts.Minimap.menuButtons.MENU_MODES
   modes.scripts.OnClick(modes)
   eq(Modes.Window.frame:IsShown(), true)

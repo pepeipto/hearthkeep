@@ -2,6 +2,9 @@ local _, Alts = ...
 local HK = _G.Hearthkeep
 
 Alts.Module = HK:RegisterModule("Alts", {
+  group = "adventure", title = "MOD_ALTS", desc = "MOD_ALTS_DESC", command = "alts",
+  presets = { minimal = true, recommended = true },
+  Open = function() Alts.Window.Toggle() end,
   OnEnable = function()
     Alts.Capture.Snapshot()
     Alts.Minimap.Create()
@@ -12,7 +15,14 @@ Alts.Module = HK:RegisterModule("Alts", {
   end,
 })
 
-HK:SetDefaultCommand(function() Alts.Window.Toggle() end)
+HK:RegisterCommand("alts", function() Alts.Window.Toggle() end, "alts - your characters overview")
+
+HK.Locale.Register("enUS", { MOD_ALTS = "Characters",
+  MOD_ALTS_DESC = "All your characters at a glance: level, gold, professions and cooldowns. Minimap button with a quick menu." })
+HK.Locale.Register("esES", { MOD_ALTS = "Personajes",
+  MOD_ALTS_DESC = "Todos tus personajes de un vistazo: nivel, oro, profesiones y tiempos de reutilización. Botón en el minimapa con menú rápido." })
+HK.Locale.Register("deDE", { MOD_ALTS = "Charaktere",
+  MOD_ALTS_DESC = "Alle deine Charaktere auf einen Blick: Stufe, Gold, Berufe und Abklingzeiten. Minimap-Knopf mit Schnellmenü." })
 
 HK:RegisterCommand("unhide", function(args)
   local wanted = args:lower()

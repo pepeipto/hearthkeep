@@ -3,6 +3,9 @@ local HK = _G.Hearthkeep
 HK.Modes = Modes
 
 HK:RegisterModule("Modes", {
+  group = "suite", title = "MOD_MODES", desc = "MOD_MODES_DESC", command = "mode",
+  presets = { minimal = false, recommended = false },
+  Open = function() Modes.Window.Toggle() end,
   OnEnable = function() end,
   OnDisable = function() Modes.Window.Hide() end,
 })
@@ -37,3 +40,10 @@ HK:RegisterCommand("mode", function(args)
     Modes.Window.Toggle()
   end
 end, HK.L.MODE_HELP)
+
+HK.Locale.Register("enUS", { MOD_MODES = "Activity modes",
+  MOD_MODES_DESC = "Optional: if you also use addons from other authors, switch them on and off by activity (raid, dungeons, PvP, quests, world). Hearthkeep itself never needs them." })
+HK.Locale.Register("esES", { MOD_MODES = "Modos de actividad",
+  MOD_MODES_DESC = "Opcional: si además usas addons de otros autores, enciéndelos y apágalos según la actividad (banda, mazmorras, JcJ, misiones, mundo). Hearthkeep no los necesita." })
+HK.Locale.Register("deDE", { MOD_MODES = "Aktivitätsmodi",
+  MOD_MODES_DESC = "Optional: falls du auch Addons anderer Autoren nutzt, schalte sie je nach Aktivität um (Schlachtzug, Dungeons, PvP, Quests, Welt). Hearthkeep selbst braucht sie nicht." })

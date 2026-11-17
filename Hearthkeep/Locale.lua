@@ -230,17 +230,17 @@ Locale.Register("deDE", {
 
 -- Options and minimap menu (Task 12). Spanish and German need native review before release.
 Locale.Register("enUS", {
-  MENU_MODES = "Modes", MENU_ALTS = "Alts", MENU_SETUP = "Setup",
+  MENU_HOME = "Hearthkeep", MENU_MODES = "Modes", MENU_ALTS = "Alts", MENU_SETUP = "Setup",
   SETUP_AGAIN = "Run setup again", RESTORE_ORIGINAL = "Restore my original addons",
   OPTIONS_LANGUAGE = "Language", OPTIONS_SKIN = "Skin",
 })
 Locale.Register("esES", {
-  MENU_MODES = "Modos", MENU_ALTS = "Alts", MENU_SETUP = "Configuración",
+  MENU_HOME = "Hearthkeep", MENU_MODES = "Modos", MENU_ALTS = "Alts", MENU_SETUP = "Configuración",
   SETUP_AGAIN = "Repetir la configuración", RESTORE_ORIGINAL = "Restaurar mis addons originales",
   OPTIONS_LANGUAGE = "Idioma", OPTIONS_SKIN = "Aspecto",
 })
 Locale.Register("deDE", {
-  MENU_MODES = "Modi", MENU_ALTS = "Alts", MENU_SETUP = "Einrichtung",
+  MENU_HOME = "Hearthkeep", MENU_MODES = "Modi", MENU_ALTS = "Alts", MENU_SETUP = "Einrichtung",
   SETUP_AGAIN = "Einrichtung wiederholen", RESTORE_ORIGINAL = "Meine ursprünglichen Addons wiederherstellen",
   OPTIONS_LANGUAGE = "Sprache", OPTIONS_SKIN = "Design",
 })

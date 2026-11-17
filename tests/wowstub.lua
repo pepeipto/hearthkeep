@@ -184,7 +184,7 @@ function Stub.load(dir)
   for line in fh:lines() do
     line = line:gsub("%s+$", "")
     if line ~= "" and line:sub(1, 1) ~= "#" and line:match("%.lua$") then
-      local chunk, err = loadfile(dir .. "/" .. line)
+      local chunk, err = loadfile(dir .. "/" .. line:gsub("\\", "/"))
       if not chunk then fh:close() error(err) end
       chunk(dir, ns)
     end

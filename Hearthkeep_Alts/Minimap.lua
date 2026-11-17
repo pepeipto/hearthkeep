@@ -43,6 +43,7 @@ local function followCursor()
 end
 
 local ACTIONS = {
+  MENU_HOME = function() HK.Home.Toggle() end,
   MENU_MODES = function() HK.Modes.Window.Toggle() end,
   MENU_ALTS = function() Alts.Window.Toggle() end,
   MENU_SETUP = function() HK.Modes.Setup.Open() end,
@@ -51,6 +52,7 @@ local ACTIONS = {
 -- Entries depend on whether Hearthkeep_Modes is loaded.
 function Minimap.MenuEntries()
   local keys = {}
+  if HK.Home then keys[#keys + 1] = "MENU_HOME" end
   local modes = HK.Modes
   if modes and modes.Window then keys[#keys + 1] = "MENU_MODES" end
   keys[#keys + 1] = "MENU_ALTS"

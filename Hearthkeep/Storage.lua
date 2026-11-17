@@ -19,6 +19,9 @@ local function defaults()
     bosses = { levels = {} },
     ui = { sort = "level", desc = true },
     characters = {},
+    moduleData = {},
+    charData = {},
+    hud = {},
   }
 end
 
