@@ -4,6 +4,9 @@ Un solo addon, `Hearthkeep`. No necesita ningún addon de otros autores.
 
 ## 1. Instalar
 
+**En tu PC ya está instalado** (17-11-2026; copia de las carpetas antiguas guardada). Para
+otro PC:
+
 1. Cierra el juego.
 2. Copia la carpeta `Hearthkeep` del zip (`dist/Hearthkeep-0.3.0.zip`) en
    `C:\Program Files (x86)\World of Warcraft\_forever_\Interface\AddOns`.
@@ -13,8 +16,9 @@ Un solo addon, `Hearthkeep`. No necesita ningún addon de otros autores.
 
 ## 2. Primera vez
 
-Sale el asistente: idioma → aspecto → **Mínimo** o **Recomendado**. Al terminar se abre la
-ventana principal. Puedes repetirlo con `/hk setup`.
+En una instalación nueva sale el asistente: idioma → aspecto → **Mínimo** o
+**Recomendado**. Al terminar se abre la ventana principal. **Tú ya lo habías hecho antes**,
+así que no saldrá solo: escribe `/hk setup` y elige **Recomendado** para encender los módulos.
 
 ## 3. La ventana principal: `/hk`
 
