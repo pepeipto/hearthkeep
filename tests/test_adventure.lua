@@ -1038,6 +1038,7 @@ test("the Waypoint page shows the target, sets from the inputs and reuses recent
   GetPlayerFacing = function() return 0 end
   local holder = CreateFrame("Frame")
   W.Page.build(holder, 568, 330)
+  holder.mode = "recent"
   W.Page.refresh(holder)
   eq(holder.target.distance.text, "No waypoint set")
   falsy(holder.target.clear:IsShown())
