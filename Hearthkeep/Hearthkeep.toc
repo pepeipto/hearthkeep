@@ -24,6 +24,10 @@ Modules\QoL\Bags.lua
 Modules\QoL\Vendor.lua
 Modules\QoL\Loot.lua
 Modules\QoL\TopBar.lua
+Modules\Combat\Locale.lua
+Modules\Combat\Threat.lua
+Modules\Combat\Buffs.lua
+Modules\Combat\Macros.lua
 Modules\Alts\Format.lua
 Modules\Alts\Store.lua
 Modules\Alts\Query.lua
