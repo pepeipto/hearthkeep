@@ -15,7 +15,7 @@ local function readToc(dir)
     if key then
       toc.fields[key] = value
     elseif line ~= "" and line:sub(1, 1) ~= "#" then
-      toc.files[#toc.files + 1] = line
+      toc.files[#toc.files + 1] = (line:gsub("\\", "/"))
     end
   end
   return toc

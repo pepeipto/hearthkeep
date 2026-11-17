@@ -43,11 +43,23 @@ test("ApplyPreset switches only modules that declare presets", function()
   HK:RegisterModule("B", { presets = { minimal = true, recommended = true } })
   HK:RegisterModule("C", {})
   Stub.fire("PLAYER_LOGIN")
-  eq(HK:ApplyPreset("recommended"), 1)
+  -- Modules shipped in the TOC also declare presets; count only their changes apart.
+  local function shipped(preset)
+    local n = 0
+    for _, name in ipairs(HK:ModuleNames()) do
+      local p = HK:ModuleInfo(name).presets
+      if name ~= "A" and name ~= "B" and name ~= "C" and type(p) == "table" and p[preset] ~= nil
+        and (p[preset] and true or false) ~= HK:IsModuleEnabled(name) then n = n + 1 end
+    end
+    return n
+  end
+  local extra = shipped("recommended")
+  eq(HK:ApplyPreset("recommended"), 1 + extra)
   truthy(HK:IsModuleEnabled("A"))
   truthy(HK:IsModuleEnabled("B"))
   truthy(HK:IsModuleEnabled("C"))
-  eq(HK:ApplyPreset("minimal"), 1)
+  extra = shipped("minimal")
+  eq(HK:ApplyPreset("minimal"), 1 + extra)
   falsy(HK:IsModuleEnabled("A"))
   truthy(HK:IsModuleEnabled("C"))
   eq(HK.db.settings.modules.A, false)
@@ -108,7 +120,16 @@ test("Home.ListRows puts a header before each group", function()
   local HK = boot()
   HK:RegisterModule("X", { group = "qol" })
   HK:RegisterModule("J", { group = "adventure" })
-  local rows = HK.Home.ListRows()
+  -- Keep only the two test modules and the headers directly above them (modules shipped
+  -- in the TOC also appear in the list).
+  local kept = {}
+  for _, row in ipairs(HK.Home.ListRows()) do
+    if row.header or row.name == "J" or row.name == "X" then kept[#kept + 1] = row end
+  end
+  local rows = {}
+  for i, row in ipairs(kept) do
+    if not row.header or (kept[i + 1] and not kept[i + 1].header) then rows[#rows + 1] = row end
+  end
   eq(#rows, 4)
   truthy(rows[1].header)
   eq(rows[2].name, "J")
