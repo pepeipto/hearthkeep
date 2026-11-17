@@ -1063,6 +1063,8 @@ test("the Waypoint page shows the target, sets from the inputs and reuses recent
   eq(W.current, nil)
   local go = holder.recent.rows[1].go
   go.scripts.OnClick(go)
+  noErrors(HK, "Waypoint")
+  eq(rawget(go, "entry") ~= nil, true)
   eq(W.current.note, "Mine")
   noErrors(HK, "Waypoint")
 end)
