@@ -435,10 +435,10 @@ test("the Training page waits for the end of combat to build its frames", functi
   Stub.inCombat = true
   T.Page.build(holder, 568, 330)
   T.Page.refresh(holder)
-  eq(holder.list, nil)
+  eq(rawget(holder, "list"), nil)
   Stub.inCombat = false
   T.Page.refresh(holder)
-  truthy(holder.list)
+  truthy(rawget(holder, "list"))
   noErrors(HK, "Training")
 end)
 
