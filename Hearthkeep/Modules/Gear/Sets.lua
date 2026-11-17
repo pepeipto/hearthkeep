@@ -310,7 +310,8 @@ end
 -- else the set named like the kind. nil when there is none (or "none" was picked).
 function Sets.AutoSet(kind)
   local d = store()
-  local chosen = type(d.autoSets) == "table" and d.autoSets[kind]
+  local chosen
+  if type(d.autoSets) == "table" then chosen = d.autoSets[kind] end
   if chosen == false then return nil end
   if type(chosen) == "string" then
     local found = Sets.Find(chosen)
