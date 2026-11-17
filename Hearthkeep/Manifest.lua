@@ -36,6 +36,8 @@ Manifest.modes = {
   } },
   { id = "quests", nameKey = "MODE_QUESTS", addons = {
     core("Questie", "Questie", "PURPOSE_QUEST_MAP"),
+    -- Since Questie 12 the quest database is a separate, required addon.
+    core("QuestieDB", "QuestieDB", "PURPOSE_QUEST_DATA"),
     core("TomTom", "TomTom", "PURPOSE_ROUTE_ARROW"),
     core("Leatrix_Maps", "Leatrix Maps", "PURPOSE_WORLD_MAP"),
   } },

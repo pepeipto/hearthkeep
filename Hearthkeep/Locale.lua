@@ -268,3 +268,8 @@ Locale.Register("deDE", {
   LEVEL_LOW = "Niedrig", LEVEL_MEDIUM = "Mittel", LEVEL_HIGH = "Hoch",
   UNKNOWN_RAID = "Unbekannter Schlachtzug: ", BOSSES_HELP = "bosses [Schlachtzug] - Boss-Notizen",
 })
+
+-- Quest database companion (Questie 12 and later). Spanish and German need native review.
+Locale.Register("enUS", { PURPOSE_QUEST_DATA = "quest database" })
+Locale.Register("esES", { PURPOSE_QUEST_DATA = "base de datos de misiones" })
+Locale.Register("deDE", { PURPOSE_QUEST_DATA = "Quest-Datenbank" })

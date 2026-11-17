@@ -72,3 +72,11 @@ test("ManagedFolders is the union over all modes", function()
   falsy(managed["Hearthkeep"])
   falsy(managed["Hearthkeep_Alts"])
 end)
+
+test("the quests mode turns on QuestieDB together with Questie, which needs it", function()
+  local HK = Stub.load("Hearthkeep")
+  local roles = {}
+  for _, entry in ipairs(HK.Manifest.Addons("quests")) do roles[entry.folder] = entry.role end
+  eq(roles["Questie"], "core")
+  eq(roles["QuestieDB"], "core")
+end)

@@ -56,6 +56,7 @@ test("missing lists each uninstalled entry once with its curse name and first mo
   local _, Engine = setup()
   local plan = Engine.Plan({ "quests", "world" })
   eq(plan.missing, {
+    { folder = "QuestieDB", curse = "QuestieDB", modeId = "quests" },
     { folder = "Leatrix_Maps", curse = "Leatrix Maps", modeId = "quests" },
     { folder = "OpenMap", curse = "OpenMap", modeId = "world" },
   })
@@ -120,6 +121,8 @@ test("an echoing client still lists uninstalled addons as missing and never enab
   local _, Engine = setup()
   Stub.setAddons(BASE, { echo = true })
   local plan = Engine.Plan({ "quests" })
-  eq(plan.missing[1].folder, "Leatrix_Maps")
+  local missing = {}
+  for _, entry in ipairs(plan.missing) do missing[entry.folder] = true end
+  truthy(missing["Leatrix_Maps"] and missing["QuestieDB"])
   eq(plan.on, { "Questie", "TomTom" })
 end)
