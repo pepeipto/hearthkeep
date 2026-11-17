@@ -803,10 +803,14 @@ local function buildPage(holder, w, h)
     r.note:SetWidth(w - 340)
     if r.note.SetWordWrap then r.note:SetWordWrap(false) end
     r.go = UI.Button(r, "", 56, 18, function(self)
-      if self.quest then Waypoint.GoQuest(self.quest)
-      elseif self.entry then Waypoint.Reuse(self.entry) end
+      local quest, entry = rawget(self, "quest"), rawget(self, "entry")
+      if quest then Waypoint.GoQuest(quest)
+      elseif entry then Waypoint.Reuse(entry) end
     end)
-    r:SetScript("OnClick", function() if r.go.quest then Waypoint.GoQuest(r.go.quest) end end)
+    r:SetScript("OnClick", function()
+      local quest = rawget(r.go, "quest")
+      if quest then Waypoint.GoQuest(quest) end
+    end)
     r.go:SetPoint("RIGHT", r, "RIGHT", -6, 0)
   end, function(r, entry)
     UI.SetPanelColors(r, r.stripe)
