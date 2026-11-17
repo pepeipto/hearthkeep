@@ -71,9 +71,14 @@ function Setup.SuggestionText(code)
   return SUGGESTIONS[code]
 end
 
+-- The frame is kept (hidden) so opening the assistant again reuses it instead of
+-- creating a new frame and skin entry each time.
 function Setup.Close()
   if Setup.frame then Setup.frame:Hide() end
-  Setup.frame = nil
+end
+
+function Setup.IsShown()
+  return Setup.frame ~= nil and Setup.frame:IsShown() and true or false
 end
 
 function Setup.Finish(state)
@@ -158,9 +163,7 @@ local function render(frame, state)
   frame.next:SetText(state.step >= #Setup.STEPS and L.FINISH or L.NEXT)
 end
 
-function Setup.Open()
-  if Setup.frame then Setup.frame:Show() return end
-  local state = Setup.New()
+local function create()
   local frame = newFrame("Frame", UIParent, "BackdropTemplate")
   frame:SetSize(420, 230)
   frame:SetPoint("CENTER")
@@ -187,6 +190,7 @@ function Setup.Open()
   frame.next:SetSize(120, 24)
   frame.next:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -16, 14)
   frame.next:SetScript("OnClick", function()
+    local state = frame.state
     if state.step >= #Setup.STEPS then
       Setup.Finish(state)
     else
@@ -195,16 +199,23 @@ function Setup.Open()
     end
   end)
   HK.Skins.Track(frame, "window")
-  Setup.frame = frame
+  return frame
+end
+
+-- Every opening starts again from the first step.
+function Setup.Open()
+  if not Setup.frame then Setup.frame = create() end
+  local frame = Setup.frame
+  frame.state = Setup.New()
   frame:Show()
-  render(frame, state)
+  render(frame, frame.state)
 end
 
 HK:RegisterEvent("PLAYER_LOGIN", function()
   if Setup.ShouldAutoOpen() then Setup.Open() end
 end)
 
-HK:RegisterCommand("setup", function() Setup.Open() end, HK.L.SETUP_HELP)
+HK:RegisterCommand("setup", function() Setup.Open() end, "SETUP_HELP")
 
 HK.Locale.Register("enUS", { SETUP_PRESET = "Modules",
   SETUP_PRESET_MINIMAL = "Minimal: only the characters overview. Turn on more any time with /hk.",

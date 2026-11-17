@@ -10,8 +10,24 @@ local function say(text)
   print("Hearthkeep: " .. text)
 end
 
+-- help: a locale key (resolved when the help is shown, so it follows the chosen
+-- language), a function returning the text, or plain text (a string that is not a locale
+-- key is shown as it is).
 function HK:RegisterCommand(sub, fn, help)
   commands[sub:lower()] = { fn = fn, help = help }
+end
+
+function Options.HelpText(help)
+  if type(help) == "function" then
+    local ok, text = pcall(help)
+    if not ok then
+      HK.Diag.Record("Options", "help", text)
+      return nil
+    end
+    help = text
+  end
+  if type(help) ~= "string" or help == "" then return nil end
+  return HK.L[help]
 end
 
 function HK:SetDefaultCommand(fn)
@@ -31,7 +47,8 @@ local function showHelp()
   for sub in pairs(commands) do names[#names + 1] = sub end
   table.sort(names)
   for _, sub in ipairs(names) do
-    if commands[sub].help then say("/hk " .. sub .. " - " .. commands[sub].help) end
+    local help = Options.HelpText(commands[sub].help)
+    if help then say("/hk " .. sub .. " - " .. help) end
   end
 end
 

@@ -95,6 +95,8 @@ end
 local LIST_ROWS = 26
 local ROW_HEIGHT = 16
 local listButtons = {}
+Home.LIST_ROWS = LIST_ROWS
+Home.offset = 0
 
 local function button(parent, width, height, onClick)
   local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
@@ -114,6 +116,9 @@ local function create()
   frame:RegisterForDrag("LeftButton")
   frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
   frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
+  -- The list holds LIST_ROWS rows; the mouse wheel scrolls through the rest.
+  frame:EnableMouseWheel(true)
+  frame:SetScript("OnMouseWheel", function(_, delta) Home.Scroll(-(delta or 0)) end)
   frame:Hide()
   if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "HearthkeepHomeFrame") end
 
@@ -183,6 +188,45 @@ function Home.ListRows()
   return rows
 end
 
+-- Largest list offset: the last row is at the bottom of the visible list.
+function Home.MaxOffset()
+  return math.max(0, #Home.ListRows() - LIST_ROWS)
+end
+
+local function clampOffset(offset)
+  offset = math.floor(tonumber(offset) or 0)
+  return math.max(0, math.min(offset, Home.MaxOffset()))
+end
+
+-- Moves the list by `delta` rows (positive scrolls down), clamped. Returns the offset.
+function Home.Scroll(delta)
+  Home.offset = clampOffset((Home.offset or 0) + (tonumber(delta) or 0))
+  Home.Refresh()
+  return Home.offset
+end
+
+-- The rows currently in the visible part of the list.
+function Home.VisibleRows()
+  local rows, visible = Home.ListRows(), {}
+  local offset = clampOffset(Home.offset)
+  for i = 1, LIST_ROWS do visible[i] = rows[offset + i] end
+  return visible
+end
+
+-- Scrolls just enough for a module's row to be visible.
+local function reveal(name)
+  for index, row in ipairs(Home.ListRows()) do
+    if row.name == name and not row.header then
+      if index <= Home.offset then
+        Home.offset = clampOffset(index - 1)
+      elseif index > Home.offset + LIST_ROWS then
+        Home.offset = clampOffset(index - LIST_ROWS)
+      end
+      return
+    end
+  end
+end
+
 local function paint()
   local frame = Home.frame
   frame.title:SetText(HK.L.HOME_TITLE)
@@ -192,8 +236,9 @@ local function paint()
       if not row.header then Home.selected = row.name break end
     end
   end
+  Home.offset = clampOffset(Home.offset)
   for i, widget in ipairs(listButtons) do
-    local row = rows[i]
+    local row = rows[Home.offset + i]
     if row then
       widget:Show()
       widget.moduleName = row.name
@@ -248,7 +293,10 @@ function Home.Open(name)
     end
     Home.frame = frame
   end
-  if name then Home.selected = name end
+  if name then
+    Home.selected = name
+    reveal(name)
+  end
   Home.frame:Show()
   Home.Refresh()
   return true

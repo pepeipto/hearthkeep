@@ -75,6 +75,7 @@ local function buildMenu()
     local text = button:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     text:SetAllPoints()
     text:SetText(HK.L[key])
+    button.label = text
     button:SetScript("OnClick", function()
       menu:Hide()
       pcall(ACTIONS[key])
@@ -86,6 +87,13 @@ local function buildMenu()
   return menu
 end
 
+-- Labels are set every time the menu opens, so a language change applies at once.
+function Minimap.UpdateMenuLabels()
+  for key, button in pairs(Minimap.menuButtons or {}) do
+    if button.label then button.label:SetText(HK.L[key]) end
+  end
+end
+
 function Minimap.ShowMenu(anchor)
   if not Minimap.menu then Minimap.menu = buildMenu() end
   local menu = Minimap.menu
@@ -93,6 +101,7 @@ function Minimap.ShowMenu(anchor)
     menu:Hide()
     return
   end
+  Minimap.UpdateMenuLabels()
   menu:ClearAllPoints()
   menu:SetPoint("TOPRIGHT", anchor or UIParent, anchor and "BOTTOMRIGHT" or "CENTER")
   menu:Show()

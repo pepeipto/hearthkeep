@@ -27,7 +27,7 @@ HK:RegisterCommand("bosses", function(args)
     return
   end
   Bosses.Window.Open(id)
-end, HK.L.BOSSES_HELP)
+end, "BOSSES_HELP")
 
 HK.Locale.Register("enUS", { MOD_BOSSES = "Boss notes",
   MOD_BOSSES_DESC = "Short notes for each raid boss (Molten Core, Onyxia) and clearer encounter warnings where the game allows them." })

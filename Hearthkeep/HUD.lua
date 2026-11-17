@@ -41,9 +41,54 @@ local function place(frame, name, fallback)
   frame:SetPoint(pos[1], UIParent, pos[2], pos[3], pos[4])
 end
 
+-- While unlocked every HUD frame of an enabled module is visible so it can be dragged,
+-- even when its owner has nothing to show. The owner's own Show/Hide/SetShown calls made
+-- meanwhile are remembered in frame.hkWasShown and applied when the frames are locked
+-- again. Owners may set frame.hkOnLockChanged(frame, unlocked) to be told (for example to
+-- refresh their contents after locking).
+local function wrapVisibility(frame)
+  local show, hide = frame.Show, frame.Hide
+  frame.hkRawShow, frame.hkRawHide = show, hide
+  frame.Show = function(self)
+    if rawget(self, "hkWasShown") ~= nil then self.hkWasShown = true else show(self) end
+  end
+  frame.Hide = function(self)
+    if rawget(self, "hkWasShown") ~= nil then self.hkWasShown = false else hide(self) end
+  end
+  frame.SetShown = function(self, shown)
+    if shown then self:Show() else self:Hide() end
+  end
+end
+
+local function ownerEnabled(name)
+  if not HK:ModuleInfo(name) then return true end
+  return HK:IsModuleEnabled(name)
+end
+
+local function handleText(name)
+  local def = HK:ModuleInfo(name)
+  local title = def and type(def.title) == "string" and HK.L[def.title]
+  return (type(title) == "string" and title ~= def.title) and title or name
+end
+
 local function applyLock(frame)
-  frame:EnableMouse(HUD.unlocked or frame.hkClickable == true)
-  if frame.hkHandle then frame.hkHandle:SetShown(HUD.unlocked) end
+  local name = frame.hkName
+  if HUD.unlocked then
+    if rawget(frame, "hkWasShown") == nil and ownerEnabled(name) then
+      frame.hkWasShown = frame:IsShown() and true or false
+      frame.hkRawShow(frame)
+    end
+  elseif rawget(frame, "hkWasShown") ~= nil then
+    local wasShown = frame.hkWasShown
+    frame.hkWasShown = nil
+    if wasShown then frame.hkRawShow(frame) else frame.hkRawHide(frame) end
+  end
+  local placeholder = HUD.unlocked and rawget(frame, "hkWasShown") ~= nil
+  frame:EnableMouse(placeholder or frame.hkClickable == true)
+  if frame.hkHandle then
+    if placeholder then frame.hkHandle:SetText(handleText(name)) end
+    frame.hkHandle:SetShown(placeholder)
+  end
 end
 
 -- fallback: optional { point, relativePoint, x, y } used until the player moves it.
@@ -66,7 +111,9 @@ function HUD.Create(name, width, height, fallback)
   handle:SetPoint("BOTTOM", frame, "TOP", 0, 2)
   handle:SetText(name)
   frame.hkHandle = handle
+  frame.hkName = name
   frame.hkFallback = fallback
+  wrapVisibility(frame)
   place(frame, name, fallback)
   applyLock(frame)
   HK.Skins.Track(frame, "window")
@@ -87,7 +134,15 @@ end
 
 function HUD.SetUnlocked(unlocked)
   HUD.unlocked = unlocked and true or false
-  for _, frame in pairs(frames) do pcall(applyLock, frame) end
+  for _, frame in pairs(frames) do
+    local ok, err = pcall(applyLock, frame)
+    if not ok then HK.Diag.Record("HUD", "lock", err) end
+    local onLock = rawget(frame, "hkOnLockChanged")
+    if type(onLock) == "function" then
+      ok, err = pcall(onLock, frame, HUD.unlocked)
+      if not ok then HK.Diag.Record(frame.hkName or "HUD", "OnLockChanged", err) end
+    end
+  end
   return HUD.unlocked
 end
 

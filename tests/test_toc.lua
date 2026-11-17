@@ -96,3 +96,19 @@ test("the build and install scripts ship the one folder and clean the old ones",
     truthy(install:find("'" .. dir .. "'", 1, true), dir .. " not cleaned by install.ps1")
   end
 end)
+
+test("install.ps1 removes links as links, uses literal paths and checks the folder", function()
+  local text = table.concat(readLines("scripts/install.ps1"), "\n")
+  truthy(text:find("ReparsePoint", 1, true), "no reparse point check")
+  truthy(text:find("[IO.Directory]::Delete(", 1, true), "links not removed as links")
+  truthy(text:find("Interface\\AddOns', [StringComparison]::OrdinalIgnoreCase", 1, true), "AddOns path not checked")
+  truthy(text:find("TryParse", 1, true), "numbered choice not validated")
+  truthy(text:find("Continue? (y/n)", 1, true), "confirmation prompt missing")
+  for line in text:gmatch("[^\n]+") do
+    for _, cmd in ipairs({ "Test%-Path", "Remove%-Item", "Copy%-Item", "Get%-ChildItem" }) do
+      for rest in line:gmatch(cmd .. "%s+(%S+)") do
+        eq(rest == "-LiteralPath" or rest == "-ItemType", true)
+      end
+    end
+  end
+end)

@@ -10,11 +10,13 @@ HK:RegisterModule("Modes", {
   OnDisable = function() Modes.Window.Hide() end,
 })
 
+-- Registered at core level (no module name): the combat flag must follow every combat
+-- start and end, also while the module is off, or it could stay stuck.
 for _, event in ipairs({ "PLAYER_REGEN_DISABLED", "PLAYER_REGEN_ENABLED" }) do
   HK:RegisterEvent(event, function(name)
     Modes.Window.inCombatEvent = name == "PLAYER_REGEN_DISABLED"
-    Modes.Window.Refresh()
-  end, "Modes")
+    if Modes.Window.frame then Modes.Window.Refresh() end
+  end)
 end
 
 -- /hk mode            toggle the window
@@ -39,7 +41,7 @@ HK:RegisterCommand("mode", function(args)
   elseif not unknown then
     Modes.Window.Toggle()
   end
-end, HK.L.MODE_HELP)
+end, "MODE_HELP")
 
 HK.Locale.Register("enUS", { MOD_MODES = "Activity modes",
   MOD_MODES_DESC = "Optional: if you also use addons from other authors, switch them on and off by activity (raid, dungeons, PvP, quests, world). Hearthkeep itself never needs them." })

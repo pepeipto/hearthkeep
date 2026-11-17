@@ -66,7 +66,7 @@ test("Finish applies language, skin and preset, marks setup done and opens the h
   eq(HK.db.settings.skin, "parchment")
   truthy(HK:IsModuleEnabled("Extra"))
   truthy(HK.Home.frame:IsShown())
-  eq(HK.Setup.frame, nil)
+  falsy(HK.Setup.IsShown())
 end)
 
 test("Finish with the minimal preset leaves the optional modules off", function()
@@ -109,13 +109,41 @@ test("the assistant never switches language by itself on an esES client", functi
   eq(HK.Setup.New().language, "enUS")
 end)
 
-test("Open creates the frame and Close releases it", function()
+test("Open creates the frame once; Close hides it and Open reuses it from the first step", function()
   local HK = setup()
   eq(HK.Setup.frame, nil)
   HK.Setup.Open()
-  truthy(HK.Setup.frame)
+  local frame = HK.Setup.frame
+  truthy(frame)
+  truthy(HK.Setup.IsShown())
+  local created = #Stub.frames
+  local tracked = 0
+  local track = HK.Skins.Track
+  HK.Skins.Track = function(...) tracked = tracked + 1 return track(...) end
+  frame.next.scripts.OnClick()
+  eq(frame.state.step, 2)
   HK.Setup.Close()
-  eq(HK.Setup.frame, nil)
+  eq(HK.Setup.frame, frame)
+  falsy(HK.Setup.IsShown())
+  SlashCmdList.HEARTHKEEP("setup")
+  eq(HK.Setup.frame, frame)
+  truthy(HK.Setup.IsShown())
+  eq(frame.state.step, 1)
+  eq(#Stub.frames, created)
+  eq(tracked, 0)
+end)
+
+test("Finish and Skip hide the assistant without dropping the frame", function()
+  local HK = setup()
+  Stub.fire("PLAYER_LOGIN")
+  HK.Setup.Open()
+  local frame = HK.Setup.frame
+  HK.Setup.Skip()
+  falsy(HK.Setup.IsShown())
+  HK.Setup.Open()
+  HK.Setup.Finish(frame.state)
+  eq(HK.Setup.frame, frame)
+  falsy(HK.Setup.IsShown())
 end)
 
 test("PLAYER_LOGIN opens the assistant on a fresh install even with Modes off", function()

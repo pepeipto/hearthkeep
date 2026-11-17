@@ -129,6 +129,7 @@ end)
 
 test("the window is refused in combat and hides when combat starts", function()
   local HK, Bosses = setup()
+  Stub.fire("PLAYER_LOGIN")
   Stub.inCombat = true
   Bosses.Window.Open()
   eq(Bosses.Window.frame, nil)
