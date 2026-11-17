@@ -1,10 +1,14 @@
 local _, HK = ...
 local QoL = HK.QoL
+local UI = HK.UI
+local Page = QoL.Page
 
 -- Loot feed: the last few things you got (your own item loot from chat, money gained, XP
--- gained), each line fading after 30 seconds, plus gold per hour for the session.
+-- gained), each line fading after 30 seconds, plus gold per hour for the session. The
+-- page keeps the last 20 entries with the time they came in.
 local NAME = "Loot"
 local MAX_ENTRIES = 6
+local LOG_ENTRIES = 20
 local TTL = 30
 
 local Loot = {
@@ -12,8 +16,9 @@ local Loot = {
   default = false, presets = { minimal = false, recommended = true },
 }
 Loot.MAX_ENTRIES = MAX_ENTRIES
+Loot.LOG_ENTRIES = LOG_ENTRIES
 Loot.TTL = TTL
-Loot.state = { feed = {}, money = 0, items = 0, xp = 0, start = 0 }
+Loot.state = { feed = {}, log = {}, money = 0, items = 0, xp = 0, start = 0 }
 
 -- English fallbacks used only when the client does not define the global strings.
 local FALLBACK_FORMATS = {
@@ -113,6 +118,15 @@ function Loot.Lines(state, now)
   return lines
 end
 
+-- Dashboard card: gold per hour and the last item looted.
+function Loot.CardData(state, now)
+  local L = HK.L
+  local rate = QoL.Rate(state.money, now - state.start)
+  local sub = state.lastItem and L.LOOT_CARD_LAST:format(state.lastItem) or L.LOOT_CARD_NONE
+  return { title = L.LOOT_CARD_TITLE, value = L.LOOT_CARD_RATE:format(QoL.FormatMoney(rate)), sub = sub,
+    order = 30, icon = QoL.Icon("INV_Misc_Coin_01") }
+end
+
 -- Game ---------------------------------------------------------------------------------
 
 local function now()
@@ -129,19 +143,32 @@ local function readMoney()
   return QoL.Num(QoL.Call(NAME, "GetMoney", _G.GetMoney))
 end
 
+local function hudOn()
+  return QoL.Setting(NAME, "hud", true)
+end
+
 function Loot.Render()
   if not HK:IsModuleEnabled(NAME) then return end
   local state = Loot.state
   local t = now()
   Loot.Prune(state.feed, t, TTL)
+  if not hudOn() then
+    QoL.HideHUD(NAME)
+    return
+  end
   local frame = QoL.HUDFrame(NAME, 260, 1 + MAX_ENTRIES, { "RIGHT", "RIGHT", -40, -60 })
   if not frame then return end
   QoL.SetLines(frame, Loot.Lines(state, t))
+  QoL.LineColor(frame, 1, "gold")
   frame:Show()
 end
 
-local function add(text)
-  Loot.Push(Loot.state.feed, { t = now(), text = text }, MAX_ENTRIES)
+local function add(text, kind)
+  local t = now()
+  local state = Loot.state
+  Loot.Push(state.feed, { t = t, text = text }, MAX_ENTRIES)
+  Loot.Push(state.log, { t = t, at = QoL.Clock(NAME), text = text, kind = kind }, LOG_ENTRIES)
+  if kind == "item" then state.lastItem = text end
   Loot.Render()
   if type(C_Timer) == "table" and type(C_Timer.After) == "function" then
     C_Timer.After(TTL + 0.1, function()
@@ -149,6 +176,7 @@ local function add(text)
       if not ok then HK.Diag.Record(NAME, "fade", err) end
     end)
   end
+  QoL.Changed(NAME)
 end
 
 function Loot.OnLootMessage(message)
@@ -157,7 +185,7 @@ function Loot.OnLootMessage(message)
   local link, count = Loot.ParseLoot(text, Loot.patterns or {})
   if not link then return end
   Loot.state.items = Loot.state.items + count
-  add(count > 1 and (link .. " x" .. count) or link)
+  add(count > 1 and (link .. " x" .. count) or link, "item")
 end
 
 function Loot.OnMoney()
@@ -167,7 +195,7 @@ function Loot.OnMoney()
     local delta = money - state.lastMoney
     if delta > 0 then
       state.money = state.money + delta
-      add("+" .. QoL.FormatMoney(delta))
+      add("+" .. QoL.FormatMoney(delta), "money")
     end
   end
   if money then state.lastMoney = money end
@@ -181,7 +209,7 @@ function Loot.OnXP()
     gain, level = QoL.XPGain(state.lastXP, state.lastMax, xp, state.lastLevel, level, max)
     if gain > 0 then
       state.xp = state.xp + gain
-      add("+" .. HK.L.LOOT_XP:format(QoL.FormatNumber(gain)))
+      add("+" .. HK.L.LOOT_XP:format(QoL.FormatNumber(gain)), "xp")
     end
   end
   if level then state.lastLevel = level end
@@ -192,10 +220,17 @@ end
 function Loot.Reset()
   local state = Loot.state
   state.feed = {}
+  state.log = {}
+  state.lastItem = nil
   state.money, state.items, state.xp = 0, 0, 0
   state.start = now()
   state.lastMoney = readMoney()
   state.lastXP, state.lastMax, state.lastLevel = readXP()
+  QoL.Changed(NAME)
+end
+
+function Loot.Card()
+  return Loot.CardData(Loot.state, now())
 end
 
 function Loot.Report()
@@ -204,8 +239,68 @@ function Loot.Report()
     QoL.FormatMoney(QoL.Rate(state.money, now() - state.start)), state.items, QoL.FormatNumber(state.xp)))
 end
 
+-- Opens the loot page; in combat (window not built yet) the session goes to chat instead.
 function Loot.Open()
-  Loot.Report()
+  return QoL.OpenPage(NAME, Loot.Report)
+end
+
+-- Page ----------------------------------------------------------------------------------
+
+Loot.Page = {}
+
+local KIND_COLOR = { item = "text", money = "gold", xp = "good" }
+
+function Loot.Page.build(holder, w)
+  holder.tiles = Page.Tiles(holder, 0, 0, w, 4, 84)
+
+  local heading = Page.Heading(holder, holder, "LOOT_PAGE_LIST", w)
+  heading:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -98)
+  holder.reset = UI.Button(holder, "", 100, 20, function()
+    Loot.Reset()
+    Loot.Render()
+  end)
+  holder.reset:SetPoint("TOPRIGHT", holder, "TOPLEFT", w, -94)
+  Page.Label(holder, holder.reset.label, "LOOT_PAGE_RESET")
+  local hud = Page.Setting(holder, holder, 250, "QOL_HUD_BOX", nil, hudOn, function(want)
+    QoL.SetSetting(NAME, "hud", want)
+    Loot.Render()
+  end)
+  hud:SetPoint("TOPRIGHT", holder, "TOPLEFT", w - 112, -92)
+
+  holder.list = Page.List(holder, holder, w, 9, 22, function(row)
+    row.time = Page.RowText(row, "small", "faint")
+    row.time:SetPoint("LEFT", row, "LEFT", 8, 0)
+    row.ago = Page.RowText(row, "small", "muted", "RIGHT")
+    row.ago:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+    row.text = Page.RowText(row, "normal", "text")
+    row.text:SetPoint("LEFT", row, "LEFT", 58, 0)
+    row.text:SetPoint("RIGHT", row, "RIGHT", -90, 0)
+  end, function(row, item)
+    row.time:SetText(item.at or "")
+    row.text:SetText(item.text or "")
+    UI.SetTextColorKey(row.text, KIND_COLOR[item.kind] or "text")
+    row.ago:SetText(QoL.Ago(now() - (QoL.Num(item.t) or now())))
+  end, "LOOT_PAGE_EMPTY")
+  holder.list:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -124)
+end
+
+function Loot.Page.refresh(holder)
+  Page.Paint(holder)
+  local L = HK.L
+  local state = Loot.state
+  local elapsed = math.max(0, now() - state.start)
+  local tiles = holder.tiles
+  tiles[1]:Set({ icon = QoL.Icon("INV_Misc_Coin_01"), title = L.LOOT_TILE_RATE,
+    value = QoL.MoneyText(QoL.Rate(state.money, elapsed)), sub = L.LOOT_TILE_RATE_SUB })
+  tiles[2]:Set({ icon = QoL.Icon("INV_Misc_Bag_10"), title = L.LOOT_TILE_MONEY,
+    value = QoL.MoneyText(state.money), sub = L.LOOT_TILE_MONEY_SUB })
+  tiles[3]:Set({ icon = "bags", title = L.LOOT_TILE_ITEMS, value = QoL.FormatNumber(state.items),
+    sub = L.LOOT_TILE_ITEMS_SUB:format(QoL.FormatNumber(state.xp)) })
+  tiles[4]:Set({ icon = QoL.Icon("INV_Misc_PocketWatch_01"), title = L.LOOT_TILE_SESSION,
+    value = QoL.FormatDuration(elapsed), sub = L.LOOT_TILE_SESSION_SUB })
+  local items = {}
+  for i, entry in ipairs(state.log) do items[i] = entry end
+  Page.SetItems(holder.list, items)
 end
 
 function Loot.OnEnable()
@@ -232,5 +327,12 @@ end
 
 HK:RegisterModule(NAME, Loot)
 
-HK:RegisterCommand("loot", QoL.Command(NAME, function() Loot.Report() end),
-  "loot - loot, gold per hour and XP of this session")
+HK:RegisterCommand("loot", QoL.Command(NAME, function(args)
+  if args:lower() == "reset" then
+    Loot.Reset()
+    Loot.Render()
+    QoL.Say(HK.L.LOOT_RESET_DONE)
+  else
+    Loot.Open()
+  end
+end), "loot [reset] - loot page: gold per hour and the last 20 things you got")
