@@ -2,7 +2,7 @@ local function setup()
   local HK = Stub.load("Hearthkeep")
   HearthkeepDB = nil
   HK.Storage.Load()
-  local Alts = Stub.load("Hearthkeep_Alts")
+  local Alts = _G.Hearthkeep.Alts
   return HK, Alts
 end
 
@@ -270,7 +270,7 @@ end)
 
 test("the minimap menu lists Modes, Alts and Setup when Modes is loaded and they work", function()
   local HK, Alts = setup()
-  local Modes = Stub.load("Hearthkeep_Modes")
+  local Modes = _G.Hearthkeep.Modes
   local button = Alts.Minimap.Create()
   button.scripts.OnClick(button, "RightButton")
   eq(Alts.Minimap.MenuEntries(), { "MENU_HOME", "MENU_MODES", "MENU_ALTS", "MENU_SETUP" })

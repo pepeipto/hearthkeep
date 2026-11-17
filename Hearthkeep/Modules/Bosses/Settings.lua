@@ -1,5 +1,6 @@
-local _, Bosses = ...
-local HK = _G.Hearthkeep
+local _, HK = ...
+local Bosses = HK.Bosses or {}
+HK.Bosses = Bosses
 
 Bosses.Settings = Bosses.Settings or {}
 local Settings = Bosses.Settings

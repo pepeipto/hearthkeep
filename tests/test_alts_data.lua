@@ -2,7 +2,7 @@ local function setup()
   local HK = Stub.load("Hearthkeep")
   HearthkeepDB = nil
   HK.Storage.Load()
-  local Alts = Stub.load("Hearthkeep_Alts")
+  local Alts = _G.Hearthkeep.Alts
   return HK, Alts
 end
 

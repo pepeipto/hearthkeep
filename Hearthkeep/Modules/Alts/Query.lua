@@ -1,4 +1,6 @@
-local _, Alts = ...
+local _, HK = ...
+local Alts = HK.Alts or {}
+HK.Alts = Alts
 
 local Query = {}
 Alts.Query = Query

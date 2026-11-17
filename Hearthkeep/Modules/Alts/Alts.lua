@@ -1,5 +1,6 @@
-local _, Alts = ...
-local HK = _G.Hearthkeep
+local _, HK = ...
+local Alts = HK.Alts or {}
+HK.Alts = Alts
 
 Alts.Module = HK:RegisterModule("Alts", {
   group = "adventure", title = "MOD_ALTS", desc = "MOD_ALTS_DESC", command = "alts",

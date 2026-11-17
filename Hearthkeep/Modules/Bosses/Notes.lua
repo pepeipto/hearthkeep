@@ -1,4 +1,6 @@
-local _, Bosses = ...
+local _, HK = ...
+local Bosses = HK.Bosses or {}
+HK.Bosses = Bosses
 
 -- Short pre-pull notes written for Hearthkeep (original text, not copied from any addon or
 -- guide). They are general reminders and are NOT yet checked against Forever's versions of

@@ -3,7 +3,7 @@ local function setup(db)
   _G.Hearthkeep = HK
   HearthkeepDB = db
   HK.Storage.Load()
-  local Bosses = Stub.load("Hearthkeep_Bosses")
+  local Bosses = _G.Hearthkeep.Bosses
   return HK, Bosses
 end
 
@@ -102,7 +102,7 @@ end)
 test("the notes window is not built until it is opened", function()
   local HK = Stub.load("Hearthkeep")
   local before = #Stub.frames
-  local Bosses = Stub.load("Hearthkeep_Bosses")
+  local Bosses = _G.Hearthkeep.Bosses
   eq(Bosses.Window.frame, nil)
   eq(#Stub.frames, before)
 end)

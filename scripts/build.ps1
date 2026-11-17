@@ -1,4 +1,4 @@
-# Builds dist/Hearthkeep-<version>.zip containing the four addon folders.
+# Builds dist/Hearthkeep-<version>.zip containing the Hearthkeep addon folder.
 # Run from anywhere: powershell -File scripts/build.ps1
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.IO.Compression
@@ -17,7 +17,7 @@ if (Test-Path $zipPath) { Remove-Item $zipPath }
 
 $zip = [System.IO.Compression.ZipFile]::Open($zipPath, 'Create')
 try {
-    foreach ($folder in 'Hearthkeep', 'Hearthkeep_Alts', 'Hearthkeep_Modes', 'Hearthkeep_Bosses') {
+    foreach ($folder in @('Hearthkeep')) {
         $base = Join-Path $root $folder
         Get-ChildItem -Path $base -Recurse -File | ForEach-Object {
             $relative = $_.FullName.Substring($root.Length + 1).Replace('\', '/')

@@ -1,5 +1,6 @@
-local _, Modes = ...
-local HK = _G.Hearthkeep
+local _, HK = ...
+local Modes = HK.Modes or {}
+HK.Modes = Modes
 local Engine = Modes.Engine
 
 -- First-run setup assistant (spec 19, 21, 22): language first, then look, modes and addons.

@@ -1,8 +1,8 @@
 ## Interface: 16001
 ## Title: Hearthkeep
-## Notes: Modular utilities for your characters.
+## Notes: All-in-one companion: dungeon and boss notes, gear score, wishlist, gear sets, training and profession planners, waypoints, XP and loot trackers, bags, vendor, threat, buffs, macros. Turn on what you want with /hk.
 ## Author: Carlos Fernandez Medina
-## Version: 0.2.0
+## Version: 0.3.0
 ## SavedVariables: HearthkeepDB
 
 Core.lua
@@ -17,3 +17,18 @@ Version.lua
 Options.lua
 HUD.lua
 Home.lua
+Modules\Alts\Format.lua
+Modules\Alts\Store.lua
+Modules\Alts\Query.lua
+Modules\Alts\Capture.lua
+Modules\Alts\Window.lua
+Modules\Alts\Minimap.lua
+Modules\Alts\Alts.lua
+Modules\Bosses\Notes.lua
+Modules\Bosses\Settings.lua
+Modules\Bosses\Window.lua
+Modules\Bosses\Commands.lua
+Modules\Modes\Engine.lua
+Modules\Modes\Window.lua
+Modules\Modes\Commands.lua
+Modules\Modes\Setup.lua

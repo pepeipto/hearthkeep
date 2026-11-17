@@ -46,7 +46,7 @@ local function render(title, caption, locale, opts, populated)
   local HK = Stub.load("Hearthkeep")
   HearthkeepDB = nil
   HK.Storage.Load()
-  local Alts = Stub.load("Hearthkeep_Alts")
+  local Alts = _G.Hearthkeep.Alts
   if populated then
     for _, record in ipairs(SAMPLE) do Alts.Store.Save(record) end
   end

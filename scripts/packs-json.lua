@@ -1,6 +1,6 @@
 -- Builds scripts/packs.json from the manifest and pack-sources.lua. Pure: returns the text.
 -- scripts/gen-packs.lua writes it; tests/test_packs.lua checks the file is up to date.
-local OWN = { "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses" }
+local OWN = { "Hearthkeep" }
 
 local function q(text)
   return '"' .. tostring(text):gsub('[\\"]', "\\%0") .. '"'

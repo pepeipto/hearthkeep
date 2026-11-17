@@ -1,5 +1,6 @@
-local _, Bosses = ...
-local HK = _G.Hearthkeep
+local _, HK = ...
+local Bosses = HK.Bosses or {}
+HK.Bosses = Bosses
 local Notes, Settings = Bosses.Notes, Bosses.Settings
 
 -- The boss notes window: raids across the top, a list of bosses, the notes of the chosen

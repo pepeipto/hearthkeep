@@ -143,7 +143,7 @@ local function panelSetup(withModes)
   _G.Hearthkeep = HK
   HearthkeepDB = nil
   HK.Storage.Load()
-  local Modes = withModes and Stub.load("Hearthkeep_Modes") or nil
+  local Modes = withModes and _G.Hearthkeep.Modes or nil
   local panel
   Settings = {
     RegisterCanvasLayoutCategory = function(p) panel = p return {} end,

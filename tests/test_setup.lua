@@ -3,7 +3,7 @@ local function setup(db)
   _G.Hearthkeep = HK
   HearthkeepDB = db
   HK.Storage.Load()
-  local Modes = Stub.load("Hearthkeep_Modes")
+  local Modes = _G.Hearthkeep.Modes
   Stub.setAddons({ { folder = "Questie", enabled = false } })
   return HK, Modes
 end

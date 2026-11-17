@@ -1,5 +1,5 @@
-local _, Modes = ...
-local HK = _G.Hearthkeep
+local _, HK = ...
+local Modes = HK.Modes or {}
 HK.Modes = Modes
 
 HK:RegisterModule("Modes", {

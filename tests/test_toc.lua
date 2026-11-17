@@ -1,4 +1,11 @@
-local ADDONS = { "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses" }
+-- Since 0.3.0 Hearthkeep ships as one folder; the old sub-addon folders must not exist.
+local ADDON = "Hearthkeep"
+local OLD_FOLDERS = { "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses" }
+-- Files allowed to use OnUpdate (dragging, or per-frame movement that needs it).
+local ONUPDATE_ALLOWED = {
+  ["Modules/Alts/Minimap.lua"] = true,
+  ["Modules/Adventure/Waypoint.lua"] = true,
+}
 
 local function readLines(path)
   local fh = assert(io.open(path, "r"), "cannot open " .. path)
@@ -8,94 +15,84 @@ local function readLines(path)
   return lines
 end
 
-local function readToc(dir)
+local function readToc()
   local toc = { fields = {}, files = {} }
-  for _, line in ipairs(readLines(dir .. "/" .. dir .. ".toc")) do
+  for _, line in ipairs(readLines(ADDON .. "/" .. ADDON .. ".toc")) do
     local key, value = line:match("^##%s*([%w%-]+):%s*(.-)$")
     if key then
       toc.fields[key] = value
     elseif line ~= "" and line:sub(1, 1) ~= "#" then
-      toc.files[#toc.files + 1] = line
+      toc.files[#toc.files + 1] = (line:gsub("\\", "/"))
     end
   end
   return toc
 end
 
-test("every file listed in each TOC exists", function()
-  for _, dir in ipairs(ADDONS) do
-    for _, file in ipairs(readToc(dir).files) do
-      local fh = io.open(dir .. "/" .. file, "r")
-      truthy(fh)
-      fh:close()
+local function eachLine(fn)
+  for _, file in ipairs(readToc().files) do
+    for number, line in ipairs(readLines(ADDON .. "/" .. file)) do
+      fn(file, number, line:gsub("%-%-.*$", ""))
     end
+  end
+end
+
+test("every file listed in the TOC exists", function()
+  for _, file in ipairs(readToc().files) do
+    local fh = io.open(ADDON .. "/" .. file, "r")
+    truthy(fh, file .. " missing")
+    if fh then fh:close() end
   end
 end)
 
-test("both TOCs declare Interface 16001", function()
-  for _, dir in ipairs(ADDONS) do eq(readToc(dir).fields.Interface, "16001") end
-end)
-
-test("only the core declares SavedVariables HearthkeepDB", function()
-  eq(readToc("Hearthkeep").fields.SavedVariables, "HearthkeepDB")
-  eq(readToc("Hearthkeep_Alts").fields.SavedVariables, nil)
-  eq(readToc("Hearthkeep_Modes").fields.SavedVariables, nil)
-end)
-
-test("Alts declares Dependencies Hearthkeep", function()
-  eq(readToc("Hearthkeep_Alts").fields.Dependencies, "Hearthkeep")
-end)
-
-test("all TOCs share the same Version", function()
-  local core = readToc("Hearthkeep").fields.Version
-  truthy(core)
-  for _, dir in ipairs(ADDONS) do eq(readToc(dir).fields.Version, core) end
-end)
-
-test("the release version is 0.2.0", function()
-  eq(readToc("Hearthkeep").fields.Version, "0.2.0")
-end)
-
-test("Hearthkeep_Modes declares Dependencies Hearthkeep", function()
-  eq(readToc("Hearthkeep_Modes").fields.Dependencies, "Hearthkeep")
-end)
-
-test("no Lua file except the minimap drag mentions OnUpdate", function()
-  for _, dir in ipairs(ADDONS) do
-    for _, file in ipairs(readToc(dir).files) do
-      if dir .. "/" .. file ~= "Hearthkeep_Alts/Minimap.lua" then
-        for number, line in ipairs(readLines(dir .. "/" .. file)) do
-          falsy(line:gsub("%-%-.*$", ""):find("OnUpdate", 1, true), dir .. "/" .. file .. ":" .. number)
-        end
-      end
-    end
+test("the TOC lists no file twice", function()
+  local seen = {}
+  for _, file in ipairs(readToc().files) do
+    falsy(seen[file], file .. " listed twice")
+    seen[file] = true
   end
 end)
 
-test("the build script packs every addon folder", function()
-  local text = table.concat(readLines("scripts/build.ps1"), "\n")
-  for _, dir in ipairs(ADDONS) do truthy(text:find("'" .. dir .. "'", 1, true), dir .. " missing from build.ps1") end
+test("the TOC declares Interface 16001 and SavedVariables HearthkeepDB", function()
+  eq(readToc().fields.Interface, "16001")
+  eq(readToc().fields.SavedVariables, "HearthkeepDB")
+end)
+
+test("the release version is 0.3.0", function()
+  eq(readToc().fields.Version, "0.3.0")
+end)
+
+test("the old sub-addon folders are gone", function()
+  for _, dir in ipairs(OLD_FOLDERS) do
+    local fh = io.open(dir .. "/" .. dir .. ".toc", "r")
+    if fh then fh:close() end
+    falsy(fh, dir .. " still exists")
+  end
+end)
+
+test("only allowed files mention OnUpdate", function()
+  eachLine(function(file, number, code)
+    if not ONUPDATE_ALLOWED[file] then
+      falsy(code:find("OnUpdate", 1, true), file .. ":" .. number)
+    end
+  end)
 end)
 
 test("no Lua file uses goto, table.unpack or integer division", function()
-  for _, dir in ipairs(ADDONS) do
-    for _, file in ipairs(readToc(dir).files) do
-      for number, line in ipairs(readLines(dir .. "/" .. file)) do
-        local code = line:gsub("%-%-.*$", "")
-        local where = dir .. "/" .. file .. ":" .. number
-        falsy(code:find("goto%s+[%a_]"), where .. " uses goto")
-        falsy(code:find("table%.unpack"), where .. " uses table.unpack")
-        falsy(code:find("[^/]//[^/]"), where .. " uses //")
-      end
-    end
+  eachLine(function(file, number, code)
+    local where = file .. ":" .. number
+    falsy(code:find("goto%s+[%a_]"), where .. " uses goto")
+    falsy(code:find("table%.unpack"), where .. " uses table.unpack")
+    falsy(code:find("[^/]//[^/]"), where .. " uses //")
+  end)
+end)
+
+test("the build and install scripts ship the one folder and clean the old ones", function()
+  for _, script in ipairs({ "scripts/build.ps1", "scripts/install.ps1" }) do
+    local text = table.concat(readLines(script), "\n")
+    truthy(text:find("'Hearthkeep'", 1, true), script .. " does not ship Hearthkeep")
   end
-end)
-
-test("Hearthkeep_Bosses declares Dependencies Hearthkeep and no SavedVariables", function()
-  eq(readToc("Hearthkeep_Bosses").fields.Dependencies, "Hearthkeep")
-  eq(readToc("Hearthkeep_Bosses").fields.SavedVariables, nil)
-end)
-
-test("the install script copies every addon folder", function()
-  local text = table.concat(readLines("scripts/install.ps1"), "\n")
-  for _, dir in ipairs(ADDONS) do truthy(text:find("'" .. dir .. "'", 1, true), dir .. " missing from install.ps1") end
+  local install = table.concat(readLines("scripts/install.ps1"), "\n")
+  for _, dir in ipairs(OLD_FOLDERS) do
+    truthy(install:find("'" .. dir .. "'", 1, true), dir .. " not cleaned by install.ps1")
+  end
 end)

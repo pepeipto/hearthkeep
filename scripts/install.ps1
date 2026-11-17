@@ -1,8 +1,9 @@
-# Installs Hearthkeep (the four addon folders) into your WoW AddOns folder.
-# It only COPIES: it never deletes anything. Run in PowerShell:
+# Installs Hearthkeep (one folder since 0.3.0) into your WoW AddOns folder.
+# It copies the Hearthkeep folder and removes only the old Hearthkeep_Alts, Hearthkeep_Modes
+# and Hearthkeep_Bosses folders (now built in). Nothing else is touched. Run in PowerShell:
 #   powershell -ExecutionPolicy Bypass -File scripts\install.ps1
 # Optional: -AddOns "C:\path\to\Interface\AddOns" to skip the search.
-param([string]$AddOns, [string]$Branch = 'feature/bosses')
+param([string]$AddOns, [string]$Branch = 'feature/allinone')
 $ErrorActionPreference = 'Stop'
 
 if (-not $AddOns) {
@@ -30,6 +31,8 @@ if (-not $AddOns) {
 }
 if (-not (Test-Path $AddOns)) { New-Item -ItemType Directory -Path $AddOns | Out-Null }
 Write-Output "Installing into: $AddOns"
+$old = @('Hearthkeep_Alts', 'Hearthkeep_Modes', 'Hearthkeep_Bosses') | Where-Object { Test-Path (Join-Path $AddOns $_) }
+if ($old) { Write-Output ("Old folders that will be removed (now inside Hearthkeep): " + ($old -join ', ')) }
 if ((Read-Host 'Continue? (y/n)') -ne 'y') { Write-Output 'Cancelled. Nothing was changed.'; exit }
 
 $temp = Join-Path $env:TEMP ('hearthkeep-' + [guid]::NewGuid().ToString('N'))
@@ -39,10 +42,16 @@ $url = "https://github.com/pepeipto/hearthkeep/archive/refs/heads/$Branch.zip"
 Invoke-WebRequest -Uri $url -OutFile $zip
 Expand-Archive -Path $zip -DestinationPath $temp
 $source = Get-ChildItem -Path $temp -Directory | Select-Object -First 1
-foreach ($folder in 'Hearthkeep', 'Hearthkeep_Alts', 'Hearthkeep_Modes', 'Hearthkeep_Bosses') {
-    $from = Join-Path $source.FullName $folder
-    if (-not (Test-Path $from)) { throw "Missing $folder in the download. Nothing more was copied." }
-    Copy-Item -Path $from -Destination $AddOns -Recurse -Force
-    Write-Output "Copied $folder"
+$from = Join-Path $source.FullName 'Hearthkeep'
+if (-not (Test-Path $from)) { throw 'Missing Hearthkeep in the download. Nothing was changed.' }
+$target = Join-Path $AddOns 'Hearthkeep'
+# Replace the folder so files removed in a new version do not linger.
+if (Test-Path $target) { Remove-Item -Path $target -Recurse -Force }
+Copy-Item -Path $from -Destination $AddOns -Recurse -Force
+Write-Output 'Copied Hearthkeep'
+foreach ($folder in 'Hearthkeep_Alts', 'Hearthkeep_Modes', 'Hearthkeep_Bosses') {
+    $path = Join-Path $AddOns $folder
+    if (Test-Path $path) { Remove-Item -Path $path -Recurse -Force; Write-Output "Removed old $folder" }
 }
+Remove-Item -Path $temp -Recurse -Force -ErrorAction SilentlyContinue
 Write-Output 'Done. Start (or restart) the game, enter with a character and type /hk debug in the game chat.'

@@ -1,5 +1,5 @@
-local _, Bosses = ...
-local HK = _G.Hearthkeep
+local _, HK = ...
+local Bosses = HK.Bosses or {}
 HK.Bosses = Bosses
 
 HK:RegisterModule("Bosses", {

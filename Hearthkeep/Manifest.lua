@@ -7,7 +7,9 @@ local _, HK = ...
 local Manifest = {}
 HK.Manifest = Manifest
 
-Manifest.PROTECTED = { Hearthkeep = true, Hearthkeep_Alts = true, Hearthkeep_Modes = true }
+-- Hearthkeep_Alts/_Modes/_Bosses were separate folders before 0.3.0; still never switched off.
+Manifest.PROTECTED = { Hearthkeep = true, Hearthkeep_Alts = true, Hearthkeep_Modes = true,
+  Hearthkeep_Bosses = true }
 
 local function core(folder, curse, purposeKey)
   return { folder = folder, curse = curse, purposeKey = purposeKey, role = "core" }

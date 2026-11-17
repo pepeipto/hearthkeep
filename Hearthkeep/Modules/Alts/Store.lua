@@ -1,5 +1,6 @@
-local _, Alts = ...
-local HK = _G.Hearthkeep
+local _, HK = ...
+local Alts = HK.Alts or {}
+HK.Alts = Alts
 
 local Store = {}
 Alts.Store = Store

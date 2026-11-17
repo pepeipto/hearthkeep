@@ -6,7 +6,7 @@ local BASE = {
 
 local function setup(list)
   local HK = Stub.load("Hearthkeep")
-  local Modes = Stub.load("Hearthkeep_Modes")
+  local Modes = _G.Hearthkeep.Modes
   _G.Hearthkeep = HK
   Stub.setAddons(list or BASE)
   HearthkeepDB = {}

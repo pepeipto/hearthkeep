@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "own": ["Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses"],
+  "own": ["Hearthkeep"],
   "modes": [
     { "id": "raid", "addons": [
         { "folder": "DBM-Core", "name": "Deadly Boss Mods", "role": "core", "github": "DeadlyBossMods/DeadlyBossMods" },

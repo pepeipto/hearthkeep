@@ -39,6 +39,12 @@ local function start(name)
 end
 
 function HK:RegisterModule(name, module)
+  if modules[name] then
+    -- A second copy (for example an old Hearthkeep_<Name> folder left in AddOns) must not
+    -- replace the built-in module.
+    if HK.Diag then HK.Diag.Record("Core", "RegisterModule", "duplicate module " .. tostring(name)) end
+    return modules[name].def
+  end
   modules[name] = { def = module, enabled = true, started = false }
   order[#order + 1] = name
   if HK.loggedIn then

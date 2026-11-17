@@ -9,7 +9,7 @@ local function setup(list)
   _G.Hearthkeep = HK
   HearthkeepDB = nil
   HK.Storage.Load()
-  local Modes = Stub.load("Hearthkeep_Modes")
+  local Modes = _G.Hearthkeep.Modes
   Stub.setAddons(list or BASE)
   return HK, Modes
 end
@@ -58,7 +58,7 @@ end)
 test("Window.frame is nil before the first Toggle and no frames are created at load", function()
   local HK = Stub.load("Hearthkeep")
   local before = #Stub.frames
-  local Modes = Stub.load("Hearthkeep_Modes")
+  local Modes = _G.Hearthkeep.Modes
   eq(Modes.Window.frame, nil)
   eq(#Stub.frames, before)
   Stub.setAddons(BASE)

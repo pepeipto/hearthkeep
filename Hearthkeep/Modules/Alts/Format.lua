@@ -1,4 +1,6 @@
-local _, Alts = ...
+local _, HK = ...
+local Alts = HK.Alts or {}
+HK.Alts = Alts
 
 local Format = {}
 Alts.Format = Format
