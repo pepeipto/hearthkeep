@@ -47,7 +47,7 @@ local ACTIONS = {
   MENU_HOME = function() HK.Home.Toggle() end,
   MENU_MODES = function() HK.Modes.Window.Toggle() end,
   MENU_ALTS = function() Alts.Window.Toggle() end,
-  MENU_SETUP = function() HK.Modes.Setup.Open() end,
+  MENU_SETUP = function() HK.Setup.Open() end,
 }
 
 -- Entries depend on whether Hearthkeep_Modes is loaded.
@@ -57,7 +57,7 @@ function Minimap.MenuEntries()
   local modes = HK.Modes
   if modes and modes.Window then keys[#keys + 1] = "MENU_MODES" end
   keys[#keys + 1] = "MENU_ALTS"
-  if modes and modes.Setup then keys[#keys + 1] = "MENU_SETUP" end
+  if HK.Setup then keys[#keys + 1] = "MENU_SETUP" end
   return keys
 end
 

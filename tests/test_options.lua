@@ -181,7 +181,7 @@ test("with Hearthkeep_Modes loaded the panel can rerun setup and restore", funct
   truthy(again)
   truthy(restore)
   again.scripts.OnClick(again)
-  truthy(Modes.Setup.frame)
+  truthy(HK.Setup.frame)
   restore.scripts.OnClick(restore)
   eq(Modes.Window.selection, {})
   eq(Modes.Window.frame:IsShown(), true)

@@ -3,7 +3,7 @@ local Modes = HK.Modes or {}
 HK.Modes = Modes
 
 HK:RegisterModule("Modes", {
-  group = "suite", title = "MOD_MODES", desc = "MOD_MODES_DESC", command = "mode",
+  group = "suite", title = "MOD_MODES", desc = "MOD_MODES_DESC", command = "mode", default = false,
   presets = { minimal = false, recommended = false },
   Open = function() Modes.Window.Toggle() end,
   OnEnable = function() end,

@@ -270,7 +270,7 @@ test("the minimap menu lists Modes, Alts and Setup when Modes is loaded and they
   modes.scripts.OnClick(modes)
   eq(Modes.Window.frame:IsShown(), true)
   Alts.Minimap.menuButtons.MENU_SETUP.scripts.OnClick(Alts.Minimap.menuButtons.MENU_SETUP)
-  truthy(Modes.Setup.frame)
+  truthy(HK.Setup.frame)
   Alts.Minimap.menuButtons.MENU_ALTS.scripts.OnClick(Alts.Minimap.menuButtons.MENU_ALTS)
   truthy(Alts.Window.frame:IsShown())
   eq(HK.Modes, Modes)

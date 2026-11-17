@@ -118,8 +118,10 @@ function Options.AddControls(panel, anchor)
       action = function() HK.Skins.SetActive(name) end }
   end
   local modes = HK.Modes
-  if modes and modes.Setup and modes.Window then
-    extra[#extra + 1] = { label = HK.L.SETUP_AGAIN, action = function() modes.Setup.Open() end }
+  if HK.Setup then
+    extra[#extra + 1] = { label = HK.L.SETUP_AGAIN, action = function() HK.Setup.Open() end }
+  end
+  if modes and modes.Window then
     extra[#extra + 1] = { label = HK.L.RESTORE_ORIGINAL, action = function() modes.Window.Open({}) end }
   end
   anchor = addRow(panel, anchor, HK.L.OPTIONS_LANGUAGE, languages)

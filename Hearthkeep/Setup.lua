@@ -1,20 +1,18 @@
 local _, HK = ...
-local Modes = HK.Modes or {}
-HK.Modes = Modes
-local Engine = Modes.Engine
 
--- First-run setup assistant (spec 19, 21, 22): language first, then look, modes and addons.
+-- First-run setup assistant: language first, then look, then which modules to turn on
+-- (a preset). It belongs to the core so it works whatever modules are on.
 local Setup = {}
-Modes.Setup = Setup
+HK.Setup = Setup
 
-Setup.STEPS = { "language", "look", "modes", "addons" }
+Setup.STEPS = { "language", "look", "preset" }
 Setup.frame = nil
 
 -- The client language is only used to offer a switch in that language, never to switch.
 local SUGGESTIONS = { esES = "¿Cambiar a español?", deDE = "Auf Deutsch wechseln?" }
 
 function Setup.New()
-  return { step = 1, language = "enUS", skin = "blizzard", modes = {} }
+  return { step = 1, language = "enUS", skin = "blizzard", preset = "recommended" }
 end
 
 local function validLanguage(code)
@@ -42,9 +40,14 @@ function Setup.Choose(state, key, value)
     state.skin = value
     HK.Skins.SetActive(value)
     return true
-  elseif key == "modes" then
-    state.modes = Engine.KnownIds(value)
-    return true
+  elseif key == "preset" then
+    for _, preset in ipairs(HK.PRESETS) do
+      if preset == value then
+        state.preset = value
+        return true
+      end
+    end
+    return false
   end
   return false
 end
@@ -76,9 +79,10 @@ end
 function Setup.Finish(state)
   HK.Locale.SetLanguage(state.language)
   HK.Skins.SetActive(state.skin)
+  HK:ApplyPreset(state.preset)
   HK.db.settings.setupDone = true
   Setup.Close()
-  if #state.modes > 0 then Modes.Window.Open(state.modes) end
+  if HK.Home then HK.Home.Open() end
   return true
 end
 
@@ -109,18 +113,10 @@ local function choices(state, step)
       list[#list + 1] = { label = HK.L["SKIN_" .. string.upper(name)], selected = state.skin == name,
         pick = function() Setup.Choose(state, "skin", name) end }
     end
-  elseif step == "modes" then
-    local chosen = {}
-    for _, id in ipairs(state.modes) do chosen[id] = true end
-    for _, id in ipairs(HK.Manifest.Ids()) do
-      list[#list + 1] = { label = HK.L[HK.Manifest.Get(id).nameKey], selected = chosen[id] or false,
-        pick = function()
-          local ids = {}
-          for _, other in ipairs(HK.Manifest.Ids()) do
-            if (other == id) ~= (chosen[other] or false) then ids[#ids + 1] = other end
-          end
-          Setup.Choose(state, "modes", ids)
-        end }
+  elseif step == "preset" then
+    for _, preset in ipairs(HK.PRESETS) do
+      list[#list + 1] = { label = HK.L["PRESET_" .. string.upper(preset)], selected = state.preset == preset,
+        pick = function() Setup.Choose(state, "preset", preset) end }
     end
   end
   return list
@@ -139,8 +135,8 @@ local function render(frame, state)
   if step == "language" then
     local suggested = Setup.SuggestLanguage()
     if suggested and suggested ~= state.language then hint = SUGGESTIONS[suggested] end
-  elseif step == "addons" then
-    hint = L.SETUP_ADDONS_TEXT
+  elseif step == "preset" then
+    hint = state.preset == "minimal" and L.SETUP_PRESET_MINIMAL or L.SETUP_PRESET_RECOMMENDED
   end
   frame.hint:SetText(hint)
   local list = choices(state, step)
@@ -173,7 +169,9 @@ function Setup.Open()
   frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
   frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -16)
   frame.hint = frame:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  frame.hint:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -150)
+  frame.hint:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -130)
+  frame.hint:SetWidth(388)
+  frame.hint:SetJustifyH("LEFT")
   frame.buttons = {}
   for i = 1, 5 do
     local button = newFrame("Button", frame, "UIPanelButtonTemplate")
@@ -204,6 +202,16 @@ end
 
 HK:RegisterEvent("PLAYER_LOGIN", function()
   if Setup.ShouldAutoOpen() then Setup.Open() end
-end, "Modes")
+end)
 
 HK:RegisterCommand("setup", function() Setup.Open() end, HK.L.SETUP_HELP)
+
+HK.Locale.Register("enUS", { SETUP_PRESET = "Modules",
+  SETUP_PRESET_MINIMAL = "Minimal: only the characters overview. Turn on more any time with /hk.",
+  SETUP_PRESET_RECOMMENDED = "Recommended: the most useful modules on. Change any of them with /hk." })
+HK.Locale.Register("esES", { SETUP_PRESET = "Módulos",
+  SETUP_PRESET_MINIMAL = "Mínimo: solo el resumen de personajes. Enciende más cuando quieras con /hk.",
+  SETUP_PRESET_RECOMMENDED = "Recomendado: los módulos más útiles encendidos. Cambia cualquiera con /hk." })
+HK.Locale.Register("deDE", { SETUP_PRESET = "Module",
+  SETUP_PRESET_MINIMAL = "Minimal: nur die Charakterübersicht. Mehr jederzeit mit /hk einschalten.",
+  SETUP_PRESET_RECOMMENDED = "Empfohlen: die nützlichsten Module an. Jedes mit /hk änderbar." })
