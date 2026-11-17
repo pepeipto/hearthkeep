@@ -95,7 +95,7 @@ end
 test("Home.Pages groups modules by section in sidebar order", function()
   local HK = boot()
   HK.Locale.Register("enUS", { T_X = "Xp thing" })
-  HK:RegisterModule("XP", { title = "T_X", command = "xp", default = false })
+  HK:RegisterModule("ZXP", { section = "progress", title = "T_X", command = "zxp", default = false })
   HK:RegisterModule("Plain", {})
   HK:RegisterModule("Placed", { section = "bags", Open = function() end })
   Stub.fire("PLAYER_LOGIN")
@@ -103,9 +103,9 @@ test("Home.Pages groups modules by section in sidebar order", function()
   local order = {}
   for i, page in ipairs(pages) do order[page.group] = i end
   truthy(order.progress < order.bags and order.bags < order.tools)
-  local xp = entryOf(pageOf(pages, "progress"), "XP")
+  local xp = entryOf(pageOf(pages, "progress"), "ZXP")
   eq(xp.title, "Xp thing")
-  eq(xp.command, "/hk xp")
+  eq(xp.command, "/hk zxp")
   eq(xp.enabled, false)
   eq(entryOf(pageOf(pages, "tools"), "Plain").title, "Plain")
   eq(entryOf(pageOf(pages, "bags"), "Placed").canOpen, true)
@@ -139,7 +139,7 @@ test("Home.Cards collects cards from enabled modules, alerts first, errors recor
   for _, t in ipairs(titles) do seen[t] = true end
   truthy(seen.A and seen.B)
   falsy(seen.Off)
-  truthy(HK.Diag.Last("CErr"))
+  truthy(HK.Diag.Last("CErr")[1])
 end)
 
 test("the home window shows the dashboard, a module page and settings without errors", function()
@@ -158,8 +158,10 @@ test("the home window shows the dashboard, a module page and settings without er
   truthy(HK.Home.SelectSection("settings"))
   truthy(HK.Home.SelectSection("home"))
   falsy(HK.Home.SelectSection("nope"))
-  eq(HK.Diag.Last("Home"), nil)
-  eq(HK.Diag.Last("Paged"), nil)
+  for _, m in ipairs({ "Home", "Paged", "UI" }) do
+    local e = HK.Diag.Last(m)[1]
+    eq(e and (m .. " " .. e.field .. ": " .. e.err), nil)
+  end
 end)
 
 test("a page is built once and only while its module is on", function()
