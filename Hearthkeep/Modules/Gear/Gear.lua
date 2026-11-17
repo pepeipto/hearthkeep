@@ -248,6 +248,12 @@ function Gear.Changed(module)
   if not ok then HK.Diag.Record(module, "Home.Changed", err) end
 end
 
+-- A module command turns its module on first, like the home window's switch.
+function Gear.EnsureOn(module)
+  if not HK:IsModuleEnabled(module) then HK:EnableModule(module) end
+  return HK:IsModuleEnabled(module)
+end
+
 -- Pages asked for in combat before the window existed: opened when combat ends.
 local queued = {}
 local regenWatched = {}
