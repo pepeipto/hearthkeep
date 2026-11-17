@@ -1,8 +1,8 @@
 local _, HK = ...
 
--- Gear: the Hearthkeep gear score (formula in Score.lua) in a small window and on the
--- player's and inspected units' tooltips. This file also holds the guarded game readers
--- and window helpers that Sets, Wishlist and Group share.
+-- Gear: the Hearthkeep gear score (formula in Score.lua) on a paper-doll page, a card on
+-- the home dashboard and the tooltips of the player and inspected units. This file also holds
+-- the guarded game readers and page helpers that Sets, Wishlist and Group share.
 local Score = HK.GearScore
 local Gear = {}
 HK.Gear = Gear
@@ -150,6 +150,7 @@ function Gear.ReadUnit(unit)
         local ok, q = Gear.Call(MODULE, "GetInventoryItemQuality", quality, unit, slot)
         if ok then info.quality = Gear.Num(q) end
       end
+      info.link = link
       items[slot] = info
     end
   end
@@ -232,104 +233,458 @@ function Gear.HookTooltip(module, kind, fn)
   return hooked
 end
 
--- Windows -------------------------------------------------------------------------------
+-- Pages ---------------------------------------------------------------------------------
+--
+-- The four modules live in the Hearthkeep window (Home.lua): a card on the dashboard and a
+-- page built from the UI kit. Helpers shared by the four pages are here.
 
-function Gear.Button(parent, width, height, onClick)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetSize(width, height)
-  b:SetScript("OnClick", onClick)
-  HK.Skins.Track(b, "button")
-  return b
+local UI = HK.UI
+
+-- Tells the Hearthkeep window that a module's data changed (it repaints when visible).
+function Gear.Changed(module)
+  local home = HK.Home
+  if type(home) ~= "table" or type(home.Changed) ~= "function" then return end
+  local ok, err = pcall(home.Changed, module)
+  if not ok then HK.Diag.Record(module, "Home.Changed", err) end
 end
 
-function Gear.Text(parent, font, width)
-  local fs = parent:CreateFontString(nil, "OVERLAY", font or "GameFontHighlightSmall")
-  if width then fs:SetWidth(width) end
-  fs:SetJustifyH("LEFT")
-  return fs
-end
-
--- A movable, skinned window named `name` that closes with Escape.
-function Gear.NewWindow(name, width, height)
-  local frame = CreateFrame("Frame", name, UIParent, "BackdropTemplate")
-  frame:SetSize(width, height)
-  frame:SetPoint("CENTER")
-  frame:SetFrameStrata("DIALOG")
-  frame:EnableMouse(true)
-  frame:SetMovable(true)
-  frame:SetClampedToScreen(true)
-  frame:RegisterForDrag("LeftButton")
-  frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-  frame:Hide()
-  if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, name) end
-  frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
-  frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-  frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
-  frame.close:SetScript("OnClick", function() frame:Hide() end)
-  HK.Skins.Track(frame, "window")
-  return frame
-end
-
--- Windows asked for in combat before they existed: opened when combat ends.
-local queued = {}
-local regenWatched = {}
-
-local function openQueued(module)
-  if Gear.InCombat() then return end
-  for holder, entry in pairs(queued) do
-    if entry.module == module then
-      queued[holder] = nil
-      if HK:IsModuleEnabled(module) then Gear.ShowWindow(holder, module, entry.create, entry.paint) end
-    end
-  end
-end
-
--- holder.frame is created on first use (never in combat: then it opens after combat),
--- shown and painted.
-function Gear.ShowWindow(holder, module, create, paint)
-  if not holder.frame then
-    if Gear.InCombat() then
-      queued[holder] = { module = module, create = create, paint = paint }
-      if not regenWatched[module] then
-        regenWatched[module] = Gear.SafeRegister(module, "PLAYER_REGEN_ENABLED", function() openQueued(module) end)
-      end
-      Gear.Say(HK.L.GEAR_COMBAT)
-      return false
-    end
-    local ok, frame = pcall(create)
-    if not ok then
-      HK.Diag.Record(module, "create", frame)
-      return false
-    end
-    holder.frame = frame
-  end
-  holder.frame:Show()
-  Gear.Paint(holder, module, paint)
-  return true
-end
-
-function Gear.Paint(holder, module, paint)
-  if not (holder.frame and holder.frame:IsShown()) then return end
-  local ok, err = pcall(paint, holder.frame)
-  if not ok then HK.Diag.Record(module, "paint", err) end
-end
-
-function Gear.HideWindow(holder)
-  queued[holder] = nil
-  if holder.frame then holder.frame:Hide() end
-end
-
--- A module command turns its module on first, like the home window's Open button.
+-- A module command turns its module on first, like the home window's switch.
 function Gear.EnsureOn(module)
   if not HK:IsModuleEnabled(module) then HK:EnableModule(module) end
   return HK:IsModuleEnabled(module)
 end
 
+-- Pages asked for in combat before the window existed: opened when combat ends.
+local queued = {}
+local regenWatched = {}
+
+local function openQueued(module)
+  if Gear.InCombat() or not queued[module] then return end
+  queued[module] = nil
+  if HK:IsModuleEnabled(module) then Gear.OpenPage(module) end
+end
+
+-- Turns the module on and shows its page in the Hearthkeep window. In combat before the
+-- window exists, the page opens when combat ends.
+function Gear.OpenPage(module)
+  if not Gear.EnsureOn(module) then return false end
+  local home = HK.Home
+  if type(home) ~= "table" or type(home.Open) ~= "function" then return false end
+  local ok, opened = pcall(home.Open, module)
+  if not ok then
+    HK.Diag.Record(module, "Open", opened)
+    return false
+  end
+  if opened then
+    queued[module] = nil
+    return true
+  end
+  if Gear.InCombat() then
+    queued[module] = true
+    if not regenWatched[module] then
+      regenWatched[module] = Gear.SafeRegister(module, "PLAYER_REGEN_ENABLED", function() openQueued(module) end)
+    end
+  end
+  return false
+end
+
+Gear.pages = {}
+local pageState = setmetatable({}, { __mode = "k" })   -- holder -> { w, h, built, failed }
+
+-- A def.Page table. build(holder, w, h) runs once, never in combat (a page asked for in
+-- combat is built by the first refresh after it); paint(holder) on every refresh.
+function Gear.MakePage(module, build, paint)
+  local function ready(holder)
+    local state = pageState[holder]
+    if not state then return false end
+    if state.built then return true end
+    if state.failed or Gear.InCombat() then return false end
+    local ok, err = pcall(build, holder, state.w, state.h)
+    if not ok then
+      state.failed = true
+      HK.Diag.Record(module, "Page.build", err)
+      return false
+    end
+    state.built = true
+    return true
+  end
+  return {
+    build = function(holder, w, h)
+      local width, height = Gear.Num(w), Gear.Num(h)
+      pageState[holder] = { w = width and width > 0 and width or 568, h = height and height > 0 and height or 330 }
+      Gear.pages[module] = holder
+      ready(holder)
+    end,
+    refresh = function(holder)
+      if ready(holder) then paint(holder) end
+    end,
+  }
+end
+
+-- The frame a module's page was built in (nil before the page was shown).
+function Gear.PageFrame(module)
+  return Gear.pages[module]
+end
+
+-- A one-line text of the UI kit.
+function Gear.Label(parent, size, colorKey, justify, width)
+  local fs = UI.Text(parent, size, colorKey, justify)
+  if width then fs:SetWidth(width) end
+  if fs.SetWordWrap then fs:SetWordWrap(false) end
+  return fs
+end
+
+-- A flat text box in the kit's colours. onEnter(editBox) runs on Enter, onLeave(editBox)
+-- when the box loses focus. box.edit is the EditBox; box.placeholder shows while empty.
+function Gear.Input(parent, width, height, onEnter, onLeave)
+  local box = UI.Panel(parent, "barBg", "line")
+  box:SetSize(width, height or 22)
+  local edit = CreateFrame("EditBox", nil, box)
+  edit:SetPoint("TOPLEFT", box, "TOPLEFT", 6, 0)
+  edit:SetPoint("BOTTOMRIGHT", box, "BOTTOMRIGHT", -6, 0)
+  edit:SetAutoFocus(false)
+  pcall(edit.SetFontObject, edit, _G.GameFontHighlightSmall or "GameFontHighlightSmall")
+  box.placeholder = Gear.Label(box, "small", "faint", "LEFT", width - 12)
+  box.placeholder:SetPoint("LEFT", box, "LEFT", 6, 0)
+  local function run(fn, self, field)
+    if not fn then return end
+    local ok, err = pcall(fn, self)
+    if not ok then HK.Diag.Record("UI", field, err) end
+  end
+  edit:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
+  edit:SetScript("OnEnterPressed", function(self)
+    run(onEnter, self, "input")
+    self:ClearFocus()
+  end)
+  edit:SetScript("OnEditFocusGained", function() UI.SetPanelColors(box, "barBg", "gold") end)
+  edit:SetScript("OnEditFocusLost", function(self)
+    UI.SetPanelColors(box, "barBg", "line")
+    run(onLeave, self, "input")
+  end)
+  edit:SetScript("OnTextChanged", function(self)
+    box.placeholder:SetShown(Gear.InputText(box) == "")
+  end)
+  box.edit = edit
+  return box
+end
+
+function Gear.InputText(box)
+  local edit = type(box) == "table" and box.edit
+  if type(edit) ~= "table" or type(edit.GetText) ~= "function" then return "" end
+  local ok, text = pcall(edit.GetText, edit)
+  return ok and Gear.Str(text) or ""
+end
+
+function Gear.SetInputText(box, text)
+  if type(box) ~= "table" or type(box.edit) ~= "table" then return end
+  local focused = type(box.edit.HasFocus) == "function" and box.edit:HasFocus()
+  if focused then return end
+  box.edit:SetText(text or "")
+  box.placeholder:SetShown((text or "") == "")
+end
+
+-- Shift-clicking an item while one of these boxes has focus puts the link into it.
+local linkBoxes = {}
+local linkHooked = false
+
+function Gear.AcceptLinks(box)
+  linkBoxes[#linkBoxes + 1] = box
+  if linkHooked then return end
+  local hook = _G.hooksecurefunc
+  if type(hook) ~= "function" or type(_G.ChatEdit_InsertLink) ~= "function" then return end
+  local ok, err = pcall(hook, "ChatEdit_InsertLink", function(text)
+    if not Gear.Str(text) then return end
+    for _, b in ipairs(linkBoxes) do
+      local edit = b.edit
+      if type(edit.HasFocus) == "function" and edit:HasFocus() then
+        pcall(edit.Insert, edit, text)
+        return
+      end
+    end
+  end)
+  if ok then linkHooked = true else HK.Diag.Record(MODULE, "hooksecurefunc", err) end
+end
+
+-- Item quality colours: the game's table when it has one, else the usual colours.
+local QUALITY_RGB = {
+  [0] = { 0.62, 0.62, 0.62 }, [1] = { 1, 1, 1 }, [2] = { 0.12, 1, 0 }, [3] = { 0, 0.44, 0.87 },
+  [4] = { 0.64, 0.21, 0.93 }, [5] = { 1, 0.5, 0 }, [6] = { 0.9, 0.8, 0.5 }, [7] = { 0, 0.8, 1 },
+}
+
+function Gear.QualityColor(quality)
+  local q = Gear.Num(quality)
+  if not q then return nil end
+  local colors = _G.ITEM_QUALITY_COLORS
+  local c = type(colors) == "table" and colors[q]
+  if type(c) == "table" and Gear.Num(c.r) and Gear.Num(c.g) and Gear.Num(c.b) then return c.r, c.g, c.b end
+  c = QUALITY_RGB[q]
+  if c then return c[1], c[2], c[3] end
+  return nil
+end
+
+local function byte(v)
+  return math.max(0, math.min(255, math.floor(v * 255 + 0.5)))
+end
+
+function Gear.ColorText(r, g, b, text)
+  return string.format("|cff%02x%02x%02x%s|r", byte(r), byte(g), byte(b), text)
+end
+
+function Gear.QualityText(quality, text)
+  local r, g, b = Gear.QualityColor(quality)
+  if not r then return text end
+  return Gear.ColorText(r, g, b, text)
+end
+
+local function texture(value)
+  if secret(value) then return nil end
+  if type(value) == "string" and value ~= "" then return value end
+  if type(value) == "number" and value > 0 then return value end
+  return nil
+end
+
+-- Icon of an item (link or id); with `slot`, the icon of what the player wears there.
+function Gear.ItemIcon(item, slot)
+  if slot then
+    local fn = Gear.Api("GetInventoryItemTexture")
+    if fn then
+      local ok, tex = Gear.Call(MODULE, "GetInventoryItemTexture", fn, "player", slot)
+      tex = ok and texture(tex)
+      if tex then return tex end
+    end
+  end
+  local id = Score.ItemId(item)
+  if not id then return nil end
+  local fn = Gear.Api("C_Item.GetItemIconByID", "GetItemIcon")
+  if not fn then return nil end
+  local ok, tex = Gear.Call(MODULE, "GetItemIcon", fn, id)
+  return ok and texture(tex) or nil
+end
+
+function Gear.SetIcon(tex, icon)
+  if icon then
+    tex:SetTexture(icon)
+    tex:Show()
+  else
+    tex:Hide()
+  end
+end
+
+-- Tooltips on the pages: fill(tooltip) adds the lines.
+function Gear.ShowTooltip(owner, fill)
+  local tip = _G.GameTooltip
+  if type(tip) ~= "table" or type(tip.SetOwner) ~= "function" then return end
+  local ok, err = pcall(function()
+    tip:SetOwner(owner, "ANCHOR_RIGHT")
+    fill(tip)
+    tip:Show()
+  end)
+  if not ok then HK.Diag.Record(MODULE, "page tooltip", err) end
+end
+
+function Gear.HideTooltip()
+  local tip = _G.GameTooltip
+  if type(tip) == "table" and type(tip.Hide) == "function" then pcall(tip.Hide, tip) end
+end
+
+-- Paper doll ----------------------------------------------------------------------------
+
+local SLOT_KEYS = { "HeadSlot", "NeckSlot", "ShoulderSlot", "ShirtSlot", "ChestSlot", "WaistSlot",
+  "LegsSlot", "FeetSlot", "WristSlot", "HandsSlot", "Finger0Slot", "Finger1Slot", "Trinket0Slot",
+  "Trinket1Slot", "BackSlot", "MainHandSlot", "SecondaryHandSlot", "RangedSlot", "TabardSlot" }
+
+function Gear.SlotName(slot)
+  local name = HK.L["GEAR_SLOT_" .. tostring(slot)]
+  if type(name) == "string" and name ~= "GEAR_SLOT_" .. tostring(slot) then return name end
+  return tostring(slot)
+end
+
+-- The game's empty-slot picture, when it has one.
+function Gear.EmptySlotIcon(slot)
+  local key = SLOT_KEYS[slot]
+  local fn = key and Gear.Api("GetInventorySlotInfo")
+  if not fn then return nil end
+  local ok, _, tex = Gear.Call(MODULE, "GetInventorySlotInfo", fn, key)
+  return ok and texture(tex) or nil
+end
+
+-- Everything the gear page and card show:
+--   { score, counted, missing, avg, slots = { [slot] = { slot, name, link, id, itemName,
+--     level, quality, weak } }, weakest = { up to 3 slot entries, weakest first } }
+-- Empty slots count as the weakest (except the off hand next to a two-hander); items whose
+-- level has not loaded yet are left out.
+function Gear.Overview()
+  local items = Gear.ReadUnit("player")
+  local score, counted, missing = Score.Compute(items)
+  local main = items[16]
+  local twoHand = type(main) == "table" and main.equipLoc == "INVTYPE_2HWEAPON" and items[17] == nil
+  local slots, candidates, total, n = {}, {}, 0, 0
+  for slot in pairs(Score.SLOT_WEIGHT) do
+    local item = items[slot]
+    local entry = { slot = slot, name = Gear.SlotName(slot) }
+    if type(item) == "table" then
+      entry.link, entry.itemName = item.link, item.name or Score.LinkName(item.link)
+      entry.id, entry.level, entry.quality = Score.ItemId(item.link), item.level, item.quality
+      if entry.level and entry.level > 0 then
+        local times = (slot == 16 and twoHand) and 2 or 1
+        total, n = total + entry.level * times, n + times
+        candidates[#candidates + 1] = entry
+      end
+    elseif not (slot == 17 and twoHand) then
+      candidates[#candidates + 1] = entry
+    end
+    slots[slot] = entry
+  end
+  table.sort(candidates, function(a, b)
+    local la, lb = a.link and a.level or 0, b.link and b.level or 0
+    if la ~= lb then return la < lb end
+    return a.slot < b.slot
+  end)
+  local weakest = {}
+  if counted > 0 then
+    for i = 1, math.min(3, #candidates) do
+      candidates[i].weak = true
+      weakest[i] = candidates[i]
+    end
+  end
+  return { score = score, counted = counted, missing = missing, avg = n > 0 and total / n or nil,
+    slots = slots, weakest = weakest }
+end
+
+-- "Wrist, ilvl 12" or "Wrist, empty".
+function Gear.WeakText(entry)
+  if entry.link and entry.level then
+    return string.format(HK.L.GEAR_WEAK_ILVL, entry.name, math.floor(entry.level))
+  end
+  return string.format(HK.L.GEAR_WEAK_EMPTY, entry.name)
+end
+
+function Gear.Card()
+  local o = Gear.Overview()
+  if o.counted == 0 then
+    return { title = HK.L.GEAR_TITLE, value = "-", sub = HK.L.GEAR_NONE, order = 20 }
+  end
+  local parts = {}
+  if o.avg then parts[#parts + 1] = string.format(HK.L.GEAR_CARD_AVG, string.format("%.1f", o.avg)) end
+  if o.weakest[1] then parts[#parts + 1] = string.format(HK.L.GEAR_WEAKEST, Gear.WeakText(o.weakest[1])) end
+  return { title = HK.L.GEAR_TITLE, value = Score.Format(o.score), sub = table.concat(parts, " · "),
+    order = 20 }
+end
+
+local LEFT_SLOTS = { 1, 2, 3, 15, 5, 9, 16, 17, 18 }
+local RIGHT_SLOTS = { 10, 6, 7, 8, 11, 12, 13, 14 }
+local TILE, STEP, SIDE_TEXT = 32, 36, 116
+
+local function slotTile(holder, slot, index, side)
+  local t = UI.Panel(holder, "card", "line")
+  t:SetSize(TILE, TILE)
+  local corner = side == "left" and "TOPLEFT" or "TOPRIGHT"
+  t:SetPoint(corner, holder, corner, 0, -(index - 1) * STEP)
+  t.icon = UI.Icon(t, TILE - 4, "fallback")
+  t.icon:SetPoint("CENTER", t, "CENTER", 0, 0)
+  t.level = Gear.Label(t, "small", "text", "RIGHT")
+  t.level:SetPoint("BOTTOMRIGHT", t, "BOTTOMRIGHT", -2, 2)
+  local justify = side == "left" and "LEFT" or "RIGHT"
+  t.label = Gear.Label(holder, "small", "muted", justify, SIDE_TEXT)
+  t.item = Gear.Label(holder, "small", "text", justify, SIDE_TEXT)
+  if side == "left" then
+    t.label:SetPoint("TOPLEFT", t, "TOPRIGHT", 6, -2)
+    t.item:SetPoint("BOTTOMLEFT", t, "BOTTOMRIGHT", 6, 3)
+  else
+    t.label:SetPoint("TOPRIGHT", t, "TOPLEFT", -6, -2)
+    t.item:SetPoint("BOTTOMRIGHT", t, "BOTTOMLEFT", -6, 3)
+  end
+  t.slot = slot
+  t:EnableMouse(true)
+  t:SetScript("OnEnter", function(self)
+    Gear.ShowTooltip(self, function(tip)
+      if self.link then tip:SetInventoryItem("player", self.slot) else tip:SetText(Gear.SlotName(self.slot)) end
+    end)
+  end)
+  t:SetScript("OnLeave", Gear.HideTooltip)
+  return t
+end
+
+local function buildGearPage(holder, w, h)
+  holder.tiles = {}
+  for i, slot in ipairs(LEFT_SLOTS) do holder.tiles[slot] = slotTile(holder, slot, i, "left") end
+  for i, slot in ipairs(RIGHT_SLOTS) do holder.tiles[slot] = slotTile(holder, slot, i, "right") end
+  local side = TILE + 6 + SIDE_TEXT + 12
+  local cw = math.max(160, w - 2 * side)
+  local c = UI.Panel(holder, "card", "line")
+  c:SetPoint("TOPLEFT", holder, "TOPLEFT", side, 0)
+  c:SetSize(cw, math.min(h, #LEFT_SLOTS * STEP - (STEP - TILE)))
+  holder.center = c
+  c.caption = Gear.Label(c, "small", "muted", "CENTER", cw - 20)
+  c.caption:SetPoint("TOP", c, "TOP", 0, -14)
+  c.score = Gear.Label(c, "huge", "gold", "CENTER", cw - 20)
+  c.score:SetPoint("TOP", c.caption, "BOTTOM", 0, -6)
+  c.avg = Gear.Label(c, "normal", "text", "CENTER", cw - 20)
+  c.avg:SetPoint("TOP", c.score, "BOTTOM", 0, -8)
+  c.detail = UI.Text(c, "small", "muted", "CENTER")
+  c.detail:SetWidth(cw - 24)
+  c.detail:SetPoint("TOP", c.avg, "BOTTOM", 0, -6)
+  c.line = UI.Line(c, "line")
+  c.line:SetPoint("TOPLEFT", c, "TOPLEFT", 14, -136)
+  c.line:SetPoint("TOPRIGHT", c, "TOPRIGHT", -14, -136)
+  c.weakTitle = Gear.Label(c, "small", "gold", "CENTER", cw - 20)
+  c.weakTitle:SetPoint("TOP", c, "TOP", 0, -148)
+  c.weak = {}
+  for i = 1, 3 do
+    local fs = Gear.Label(c, "normal", "warn", "CENTER", cw - 20)
+    fs:SetPoint("TOP", c.weakTitle, "BOTTOM", 0, -6 - (i - 1) * 20)
+    c.weak[i] = fs
+  end
+  c.formula = UI.Text(c, "small", "faint", "CENTER")
+  c.formula:SetWidth(cw - 24)
+  c.formula:SetPoint("BOTTOM", c, "BOTTOM", 0, 12)
+end
+
+local function paintGearPage(holder)
+  local L = HK.L
+  local o = Gear.Overview()
+  for slot, t in pairs(holder.tiles) do
+    local e = o.slots[slot] or { slot = slot, name = Gear.SlotName(slot) }
+    t.link = e.link or false
+    Gear.SetIcon(t.icon, e.link and Gear.ItemIcon(e.link, slot) or Gear.EmptySlotIcon(slot))
+    t.icon:SetAlpha(e.link and 1 or 0.35)
+    t.label:SetText(e.name)
+    t.level:SetText(e.level and tostring(math.floor(e.level)) or "")
+    t.item:SetText(e.link and Gear.QualityText(e.quality, e.itemName or "?") or L.GEAR_EMPTY)
+    UI.SetTextColorKey(t.item, e.link and "text" or "faint")
+    if e.weak then
+      UI.SetPanelColors(t, "select", "warn")
+      UI.SetTextColorKey(t.label, "warn")
+    else
+      UI.SetPanelColors(t, "card", "line")
+      UI.SetTextColorKey(t.label, "muted")
+      local r, g, b
+      if e.link then r, g, b = Gear.QualityColor(e.quality) end
+      if r and type(t.SetBackdropBorderColor) == "function" then t:SetBackdropBorderColor(r, g, b, 1) end
+    end
+  end
+  local c = holder.center
+  c.caption:SetText(string.upper(L.GEAR_SCORE_CAPTION))
+  c.formula:SetText(L.GEAR_FORMULA)
+  if o.counted == 0 then
+    c.score:SetText("-")
+    c.avg:SetText("")
+    c.detail:SetText(L.GEAR_NONE)
+  else
+    c.score:SetText(Score.Format(o.score))
+    c.avg:SetText(o.avg and string.format(L.GEAR_AVG, string.format("%.1f", o.avg)) or "")
+    local detail = string.format(L.GEAR_COUNTED, o.counted)
+    if o.missing > 0 then detail = detail .. " " .. string.format(L.GEAR_MISSING, o.missing) end
+    c.detail:SetText(detail)
+  end
+  c.weakTitle:SetText(o.weakest[1] and string.upper(L.GEAR_UPGRADE_FIRST) or "")
+  for i, fs in ipairs(c.weak) do
+    fs:SetText(o.weakest[i] and Gear.WeakText(o.weakest[i]) or "")
+  end
+end
+
 -- The Gear module -----------------------------------------------------------------------
 
-local window = {}
 local inspected = {}
 local inspectedCount = 0
 local started = false
@@ -386,70 +741,36 @@ local function unitTooltip(tooltip)
   end
 end
 
-local function createWindow()
-  local frame = Gear.NewWindow("HearthkeepGearFrame", 280, 150)
-  frame.score = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
-  frame.score:SetPoint("TOP", frame, "TOP", 0, -46)
-  frame.detail = Gear.Text(frame, "GameFontHighlightSmall", 250)
-  frame.detail:SetPoint("TOP", frame.score, "BOTTOM", 0, -10)
-  frame.detail:SetJustifyH("CENTER")
-  frame.formula = Gear.Text(frame, "GameFontDisableSmall", 250)
-  frame.formula:SetPoint("BOTTOM", frame, "BOTTOM", 0, 14)
-  frame.formula:SetJustifyH("CENTER")
-  return frame
-end
-
-local function paint(frame)
-  frame.title:SetText(HK.L.GEAR_TITLE)
-  local score, counted, missing = Gear.PlayerScore()
-  if counted == 0 then
-    frame.score:SetText("-")
-    frame.detail:SetText(HK.L.GEAR_NONE)
-  else
-    frame.score:SetText(Score.Format(score))
-    local detail = string.format(HK.L.GEAR_COUNTED, counted)
-    if missing > 0 then detail = detail .. " " .. string.format(HK.L.GEAR_MISSING, missing) end
-    frame.detail:SetText(detail)
-  end
-  frame.formula:SetText(HK.L.GEAR_FORMULA)
-end
-
 function Gear.Refresh()
-  Gear.Paint(window, MODULE, paint)
+  Gear.Changed(MODULE)
 end
 
 function Gear.Open()
-  if not Gear.EnsureOn(MODULE) then return false end
-  return Gear.ShowWindow(window, MODULE, createWindow, paint)
-end
-
-function Gear.Window()
-  return window.frame
-end
-
-local function repaintSoon()
-  if window.frame and window.frame:IsShown() then HK:Debounce("HKGearPaint", 0.3, Gear.Refresh) end
+  return Gear.OpenPage(MODULE)
 end
 
 function Gear.Start()
   if started then return end
   started = true
-  Gear.SafeRegister(MODULE, "PLAYER_EQUIPMENT_CHANGED", repaintSoon)
-  Gear.SafeRegister(MODULE, "GET_ITEM_INFO_RECEIVED", repaintSoon)
+  Gear.SafeRegister(MODULE, "PLAYER_EQUIPMENT_CHANGED", Gear.Refresh)
+  Gear.SafeRegister(MODULE, "GET_ITEM_INFO_RECEIVED", Gear.Refresh)
   Gear.SafeRegister(MODULE, "INSPECT_READY", function(_, guid) Gear.OnInspectReady(guid) end)
   Gear.HookTooltip(MODULE, "Unit", unitTooltip)
 end
 
 HK:RegisterModule(MODULE, {
   group = "combat",
+  section = "gear",
   title = "MOD_GEAR",
   desc = "MOD_GEAR_DESC",
   default = false,
   presets = { minimal = false, recommended = true },
   command = "gear",
   Open = function() Gear.Open() end,
+  Card = function() return Gear.Card() end,
+  Page = Gear.MakePage(MODULE, buildGearPage, paintGearPage),
   OnEnable = function() Gear.Start() end,
-  OnDisable = function() Gear.HideWindow(window) end,
+  OnDisable = function() Gear.Refresh() end,
 })
 
 HK:RegisterCommand("gear", function() Gear.Open() end, "gear - your Hearthkeep gear score")

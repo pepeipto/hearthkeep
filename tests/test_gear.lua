@@ -352,31 +352,36 @@ test("a missing or failing item API scores nothing and raises nothing", function
   truthy(#HK.Diag.Last("Gear") > 0)
 end)
 
-test("/hk gear turns the module on and opens a window that Escape closes", function()
+test("/hk gear turns the module on and opens its page in the Hearthkeep window", function()
   local HK = boot()
   world({ [1] = 100 })
   UISpecialFrames = {}
   SlashCmdList.HEARTHKEEP("gear")
   truthy(HK:IsModuleEnabled("Gear"))
-  local frame = HK.Gear.Window()
-  truthy(frame and frame:IsShown())
-  eq(frame.name, "HearthkeepGearFrame")
-  eq(frame.score.text, "92.4")
-  eq(UISpecialFrames[1], "HearthkeepGearFrame")
+  truthy(HK.Home.frame and HK.Home.frame:IsShown())
+  eq(HK.Home.selected, "Gear")
+  eq(UISpecialFrames[1], "HearthkeepHomeFrame")
+  local page = HK.Gear.PageFrame("Gear")
+  truthy(page and page:IsShown())
+  eq(page.center.score.text, "92.4")
+  for _, frame in ipairs(Stub.frames) do
+    falsy(rawget(frame, "name") == "HearthkeepGearFrame", "the old gear window still exists")
+  end
   HK:DisableModule("Gear")
-  falsy(frame:IsShown())
+  Stub.flushTimers()
+  falsy(page:IsShown())
 end)
 
-test("no window is created in combat", function()
+test("no window is created in combat; the page opens when combat ends", function()
   local HK = boot()
   Stub.inCombat = true
   falsy(HK.Gear.Open())
-  eq(HK.Gear.Window(), nil)
+  eq(HK.Home.frame, nil)
   truthy(printedContains("after combat"))
   Stub.inCombat = false
   Stub.fire("PLAYER_REGEN_ENABLED")
-  local frame = HK.Gear.Window()
-  truthy(frame and frame:IsShown())
+  truthy(HK.Home.frame and HK.Home.frame:IsShown())
+  eq(HK.Home.selected, "Gear")
 end)
 
 test("own tooltip gets the Hearthkeep score only while Gear is on", function()
@@ -524,18 +529,21 @@ test("nothing swaps while the Sets module is off", function()
   eq(#state.equips, 0)
 end)
 
-test("the sets window lists sets and closes when the module is turned off", function()
+test("the sets page lists sets, marks the worn one and hides when the module is turned off", function()
   local HK = boot()
   world({ [1] = 100 })
   HK:EnableModule("Sets")
   HK.Sets.Save("Tank")
   truthy(HK.Sets.Open())
-  local frame = HK.Sets.Window()
-  eq(frame.name, "HearthkeepSetsFrame")
-  eq(frame.rows[1].label.text, "Tank")
-  falsy(frame.rows[2].shown)
+  eq(HK.Home.selected, "Sets")
+  local page = HK.Gear.PageFrame("Sets")
+  eq(page.list.rows[1].name.text, "Tank")
+  truthy(page.list.rows[1].info.text:find("1 item", 1, true))
+  truthy(page.list.rows[1].info.text:find("worn", 1, true))
+  falsy(page.list.rows[2].shown)
   HK:DisableModule("Sets")
-  falsy(frame:IsShown())
+  Stub.flushTimers()
+  falsy(page:IsShown())
 end)
 
 -- Auto-swap with the "mounted" set {13 = Carrot}; returns state and a mount switch.
@@ -722,19 +730,39 @@ test("wishlist marks item tooltips and obtained items", function()
   eq(tip.lines[3], "On your Hearthkeep wishlist (obtained)")
 end)
 
-test("the wishlist window lists slot, item and note", function()
+test("the wishlist page lists slot, coloured item and an editable note", function()
   local HK = boot()
   world()
   _G.INVTYPE_FINGER = "Finger"
+  tooltip(nil, nil)
   HK:EnableModule("Wishlist")
   HK.Wishlist.Add(link(300), "Onyxia")
   SlashCmdList.HEARTHKEEP("want")
-  local frame = HK.Wishlist.Window()
-  eq(frame.name, "HearthkeepWishlistFrame")
-  eq(frame.rows[1].slot.text, "Finger")
-  eq(frame.rows[1].item.text, link(300))
-  eq(frame.rows[1].note.text, "Onyxia")
-  falsy(frame.rows[2].shown)
+  eq(HK.Home.selected, "Wishlist")
+  local page = HK.Gear.PageFrame("Wishlist")
+  local row = page.list.rows[1]
+  eq(row.slot.text, "Finger")
+  truthy(row.name.text:find("^|cff%x%x%x%x%x%xBand of Wishes|r$"))
+  eq(row.note.edit.text, "Onyxia")
+  falsy(row.got.shown)
+  falsy(page.list.rows[2].shown)
+  -- Editing the note saves it.
+  row.note.edit:SetText("Onyxia's Lair")
+  row.note.edit.scripts.OnEnterPressed(row.note.edit)
+  eq(HK.Wishlist.Get(300).note, "Onyxia's Lair")
+  -- The add box takes a link and a note, like /hk want.
+  page.add.edit:SetText(link(301) .. " Ragnaros")
+  page.add.edit.scripts.OnEnterPressed(page.add.edit)
+  eq(HK.Wishlist.Get(301).note, "Ragnaros")
+  eq(page.add.edit.text, "")
+  -- The remove button takes the item off the list.
+  Stub.flushTimers()
+  HK.Home.Refresh()
+  for _, r in ipairs(page.list.rows) do
+    if r.shown and r.itemId == 300 then r.remove.scripts.OnClick(r.remove) end
+  end
+  falsy(HK.Wishlist.Has(300))
+  for _, m in ipairs({ "Wishlist", "Gear", "UI", "Home" }) do eq(HK.Diag.Last(m), {}) end
 end)
 
 -- Group ----------------------------------------------------------------------------------
@@ -847,7 +875,7 @@ test("nothing is sent when alone or while the module is off", function()
   falsy(HK.Group.SendNow())
 end)
 
-test("the group window lists members with shared version and score", function()
+test("the group page lists members with shared version, score bar and badge", function()
   local HK = boot()
   world({ [1] = 100 })
   party({ { "Bob", nil }, { "Carl", nil } })
@@ -855,14 +883,22 @@ test("the group window lists members with shared version and score", function()
   HK:EnableModule("Group")
   HK.Group.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder")
   truthy(HK.Group.Open())
-  local frame = HK.Group.Window()
-  eq(frame.name, "HearthkeepGroupFrame")
-  eq(frame.rows[1].score.text, "92.4")
-  eq(frame.rows[2].name.text, "|cffc79c6eBob|r")
-  eq(frame.rows[2].version.text, "0.2.0")
-  eq(frame.rows[2].score.text, "812.5")
-  eq(frame.rows[3].score.text, "-")
-  eq(frame.rows[4].name.text, "")
+  eq(HK.Home.selected, "Group")
+  local rows = HK.Gear.PageFrame("Group").list.rows
+  eq(rows[1].score.text, "92.4")
+  truthy(rows[1].badge.shown)
+  eq(rows[2].name.text, "|cffc79c6eBob|r")
+  eq(rows[2].version.text, "0.2.0")
+  eq(rows[2].score.text, "812.5")
+  eq(rows[2].bar.value, 1)
+  truthy(rows[1].bar.value > 0.1 and rows[1].bar.value < 0.12)
+  truthy(rows[2].badge.shown)
+  eq(rows[3].score.text, "-")
+  falsy(rows[3].badge.shown)
+  falsy(rows[3].bar.shown)
+  falsy(rows[4].shown)
+  eq(HK.Group.Rows()[2].score, "812.5")
+  for _, m in ipairs({ "Group", "Gear", "UI", "Home" }) do eq(HK.Diag.Last(m), {}) end
 end)
 
 test("a group member's shared score shows on their tooltip", function()
@@ -921,4 +957,280 @@ test("group messages need a player GUID and a shared score follows that GUID", f
   eq(HK.Group.ScoreForUnit("party1"), 812.5)
   bob = "Player-1-0099"
   eq(HK.Group.ScoreForUnit("party1"), nil)
+end)
+
+-- Cards and pages ------------------------------------------------------------------------
+
+local function noErrors(HK, modules)
+  for _, m in ipairs(modules) do
+    local e = HK.Diag.Last(m)[1]
+    eq(e and (m .. " " .. tostring(e.field) .. ": " .. tostring(e.err)), nil)
+  end
+end
+
+local ALL = { "Gear", "Wishlist", "Sets", "Group", "UI", "Home" }
+
+-- A GameTooltip that can be hooked and shown; tip.shown records what a page put in it.
+local function pageTooltip()
+  local tip = tooltip(nil, nil)
+  tip.shown = {}
+  function tip:SetOwner() end
+  function tip:Show() self.shown.show = true end
+  function tip:Hide() self.shown.hide = true end
+  function tip:SetInventoryItem(unit, slot) self.shown.unit, self.shown.slot = unit, slot end
+  function tip:SetText(text) self.shown.text = text end
+  function tip:SetHyperlink(l) self.shown.link = l end
+  return tip
+end
+
+-- Every scored slot holds the Amulet (level 60) except the wrist (Old Helm, level 40).
+local function fullGear()
+  local equipped = {}
+  for slot = 1, 18 do if slot ~= 4 then equipped[slot] = 102 end end
+  equipped[9] = 101
+  return equipped
+end
+
+local PAGED = { "Gear", "Wishlist", "Sets", "Group" }
+
+test("gear card: score, average item level and the weakest slot", function()
+  local HK = boot()
+  pageTooltip()
+  world({ [1] = 100, [2] = 102 })
+  HK:EnableModule("Gear")
+  local card = HK:ModuleInfo("Gear").Card()
+  eq(card.title, "Gear score")
+  eq(card.value, "132.9")
+  eq(card.sub, "Avg item level 63.0 · weakest: Shoulders, empty")
+  world(fullGear())
+  card = HK:ModuleInfo("Gear").Card()
+  truthy(card.sub:find("weakest: Wrist, ilvl 40", 1, true), card.sub)
+  local o = HK.Gear.Overview()
+  eq(o.weakest[1].slot, 9)
+  eq(#o.weakest, 3)
+  truthy(o.slots[9].weak)
+  falsy(o.slots[3].weak)
+  world({})
+  eq(HK:ModuleInfo("Gear").Card().value, "-")
+  HK.Locale.SetLanguage("esES")
+  world({ [1] = 100, [2] = 102 })
+  eq(HK:ModuleInfo("Gear").Card().sub, "Nivel medio 63.0 · más flojo: Hombros, vacío")
+  noErrors(HK, ALL)
+end)
+
+test("a two-hander counts twice in the average and leaves the off hand out of the weakest", function()
+  local HK = boot()
+  local equipped = fullGear()
+  equipped[16], equipped[17] = 110, nil
+  world(equipped)
+  local o = HK.Gear.Overview()
+  for _, w in ipairs(o.weakest) do truthy(w.slot ~= 17) end
+  eq(o.weakest[1].slot, 9)
+end)
+
+test("wishlist card: obtained count, progress and the next item with its note", function()
+  local HK = boot()
+  pageTooltip()
+  local state = world()
+  HK:EnableModule("Wishlist")
+  local card = HK:ModuleInfo("Wishlist").Card()
+  eq(card.value, "Empty")
+  HK.Wishlist.Add(link(300), "Onyxia")
+  HK.Wishlist.Add(301, "Ragnaros")
+  state.bags = { 300 }
+  HK.Wishlist.ScanObtained()
+  card = HK:ModuleInfo("Wishlist").Card()
+  eq(card.value, "1 of 2 obtained")
+  eq(card.progress, 0.5)
+  truthy(card.sub:find("Band of Stars", 1, true), card.sub)
+  truthy(card.sub:find("Ragnaros", 1, true), card.sub)
+  state.bags = { 300, 301 }
+  HK.Wishlist.ScanObtained()
+  card = HK:ModuleInfo("Wishlist").Card()
+  eq(card.progress, 1)
+  eq(card.sub, "Everything on your list is obtained.")
+  noErrors(HK, ALL)
+end)
+
+test("sets card: nil without sets, worn set and auto-swap picks otherwise", function()
+  local HK = boot()
+  world({ [1] = 100 })
+  HK:EnableModule("Sets")
+  eq(HK:ModuleInfo("Sets").Card(), nil)
+  HK.Sets.Save("Tank")
+  local card = HK:ModuleInfo("Sets").Card()
+  eq(card.value, "Tank")
+  eq(card.sub, "Auto-swap off · saved sets: 1")
+  HK.CharDB("Sets").sets.Ride = { [1] = link(101) }
+  eq(HK.Sets.AutoSet("mounted"), nil)
+  eq(HK.Sets.CycleAuto("mounted"), "Ride")
+  eq(HK.Sets.CycleAuto("mounted"), "Tank")
+  eq(HK.Sets.CycleAuto("mounted"), nil)
+  eq(HK.Sets.CycleAuto("mounted"), "Ride")
+  HK.Sets.SetAuto(true)
+  card = HK:ModuleInfo("Sets").Card()
+  eq(card.sub, "Auto-swap on · mounted: Ride, resting: none")
+  -- A set named "resting" is used by default.
+  HK.CharDB("Sets").sets.resting = { [1] = link(100) }
+  eq(HK.Sets.AutoSet("resting"), "resting")
+  HK.CharDB("Sets").sets.Tank = nil
+  HK.CharDB("Sets").sets.resting = nil
+  eq(HK:ModuleInfo("Sets").Card().value, "No saved set worn")
+  noErrors(HK, ALL)
+end)
+
+test("the picked mounted set is worn by the auto-swap", function()
+  local HK = boot()
+  local state = world({ [13] = 201 }, { 200 })
+  local mount = { on = false }
+  IsMounted = function() return mount.on end
+  IsResting = function() return false end
+  HK:EnableModule("Sets")
+  HK.CharDB("Sets").sets = { Riding = { [13] = link(200) } }
+  eq(HK.Sets.CycleAuto("mounted"), "Riding")
+  HK.Sets.SetAuto(true)
+  Stub.flushTimers()
+  mount.on = true
+  Stub.fire("UNIT_AURA", "player")
+  Stub.flushTimers()
+  eq(state.equipped[13], 200)
+end)
+
+test("group card: nil when alone, members and average score in a group", function()
+  local HK = boot()
+  world({ [1] = 100 })
+  party({})
+  HK:EnableModule("Group")
+  eq(HK:ModuleInfo("Group").Card(), nil)
+  party({ { "Bob", nil }, { "Carl", nil } })
+  local card = HK:ModuleInfo("Group").Card()
+  eq(card.value, "3 members · 1 with Hearthkeep")
+  eq(card.sub, "Average score 92.4")
+  HK.Group.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder")
+  card = HK:ModuleInfo("Group").Card()
+  eq(card.value, "3 members · 2 with Hearthkeep")
+  truthy(card.sub:find("^Average score 452%.%d$"), card.sub)
+  noErrors(HK, ALL)
+end)
+
+test("the home dashboard shows the four cards without errors", function()
+  local HK = boot()
+  pageTooltip()
+  world({ [1] = 100 })
+  party({ { "Bob", nil } })
+  for _, m in ipairs(PAGED) do HK:EnableModule(m) end
+  HK.Sets.Save("Tank")
+  truthy(HK.Home.Open())
+  local titles = {}
+  for _, card in ipairs(HK.Home.Cards()) do titles[card.title] = card end
+  truthy(titles["Gear score"] and titles["Wishlist"] and titles["Equipment sets"] and titles["Group"])
+  eq(titles["Gear score"].icon, "gear")
+  eq(titles["Group"].icon, "group")
+  noErrors(HK, ALL)
+end)
+
+test("every page builds and refreshes without errors, empty and with data, in every language", function()
+  local HK = boot()
+  pageTooltip()
+  party({})
+  for _, m in ipairs(PAGED) do HK:EnableModule(m) end
+  truthy(HK.Home.Open())
+  for _, m in ipairs(PAGED) do
+    truthy(HK.Home.Select(m))
+    truthy(HK.Gear.PageFrame(m), m)
+  end
+  noErrors(HK, ALL)
+  world(fullGear(), { 300 })
+  party({ { "Bob", nil } })
+  RAID_CLASS_COLORS = { WARRIOR = { r = 0.78, g = 0.61, b = 0.43 } }
+  ITEM_QUALITY_COLORS = { [3] = { r = 0, g = 0.44, b = 0.87 } }
+  HK.Wishlist.Add(link(300), "Onyxia")
+  HK.Wishlist.Add(301)
+  HK.Sets.Save("Tank")
+  HK.Sets.SetAuto(true)
+  HK.Group.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder")
+  for _, language in ipairs({ "enUS", "esES", "deDE" }) do
+    HK.Locale.SetLanguage(language)
+    for _, m in ipairs(PAGED) do
+      truthy(HK.Home.Select(m))
+      HK.Home.Refresh()
+    end
+    HK.Home.SelectSection("home")
+  end
+  Stub.flushTimers()
+  noErrors(HK, ALL)
+  HK.Locale.SetLanguage("enUS")
+  HK.Home.Select("Gear")
+  local page = HK.Gear.PageFrame("Gear")
+  eq(page.tiles[9].level.text, "40")
+  eq(page.tiles[1].level.text, "60")
+  eq(page.center.weak[1].text, "Wrist, ilvl 40")
+  eq(page.center.score.text, HK.GearScore.Format(HK.Gear.PlayerScore()))
+end)
+
+test("the gear page tiles show a tooltip on hover", function()
+  local HK = boot()
+  local tip = pageTooltip()
+  world({ [1] = 100 })
+  HK:EnableModule("Gear")
+  HK.Home.Open("Gear")
+  local tiles = HK.Gear.PageFrame("Gear").tiles
+  tiles[1].scripts.OnEnter(tiles[1])
+  eq(tip.shown.unit, "player")
+  eq(tip.shown.slot, 1)
+  tiles[9].scripts.OnEnter(tiles[9])
+  eq(tip.shown.text, "Wrist")
+  tiles[9].scripts.OnLeave(tiles[9])
+  truthy(tip.shown.hide)
+  noErrors(HK, ALL)
+end)
+
+test("a page asked for in combat is built after combat", function()
+  local HK = boot()
+  pageTooltip()
+  world({ [1] = 100 })
+  HK:EnableModule("Gear")
+  truthy(HK.Home.Open())
+  Stub.inCombat = true
+  truthy(HK.Home.Select("Gear"))
+  local page = HK.Gear.PageFrame("Gear")
+  eq(rawget(page, "tiles"), nil)
+  Stub.inCombat = false
+  HK.Home.Refresh()
+  truthy(rawget(page, "tiles"))
+  eq(page.center.score.text, "92.4")
+  noErrors(HK, ALL)
+end)
+
+test("secret values never reach the pages or cards", function()
+  local HK = boot()
+  pageTooltip()
+  world({ [1] = 100 })
+  party({})
+  local secret = {}
+  issecretvalue = function(v) return v == secret end
+  GetInventoryItemTexture = function() return secret end
+  ITEM_QUALITY_COLORS = { [4] = { r = secret, g = secret, b = secret } }
+  for _, m in ipairs(PAGED) do HK:EnableModule(m) end
+  HK.Wishlist.Add(link(300))
+  HK.Home.Open("Gear")
+  HK.Home.Select("Wishlist")
+  HK.Home.SelectSection("home")
+  eq(HK:ModuleInfo("Gear").Card().value, "92.4")
+  noErrors(HK, ALL)
+end)
+
+test("pages tolerate a client without link hooks", function()
+  local HK = boot()
+  pageTooltip()
+  world({ [1] = 100 })
+  hooksecurefunc = function() error("no hooks") end
+  ChatEdit_InsertLink = function() end
+  for _, m in ipairs({ "Gear", "Wishlist" }) do HK:EnableModule(m) end
+  HK.Home.Open("Wishlist")
+  HK.Home.Select("Gear")
+  truthy(rawget(HK.Gear.PageFrame("Wishlist"), "add"))
+  -- A failing hook is recorded, never raised.
+  truthy(HK.Diag.Last("Gear")[1])
+  noErrors(HK, { "Wishlist", "UI", "Home" })
 end)
