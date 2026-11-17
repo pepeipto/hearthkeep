@@ -12,8 +12,7 @@ HK.Wishlist = Wishlist
 local MODULE = "Wishlist"
 local MAX_ITEMS = 100
 local ALERT_GAP = 30
-local ROWS = 14
-local window = { page = 1 }
+local UI = HK.UI
 local lastAlert = {}
 local started = false
 
@@ -73,6 +72,7 @@ function Wishlist.Add(value, note)
   local clean = Score.CleanNote(note, 60)
   if clean then entry.note = clean end
   describe(id, entry)
+  Wishlist.Refresh()
   return true, entry
 end
 
@@ -81,6 +81,7 @@ function Wishlist.Remove(value)
   local entry = entryFor(id)
   if not entry then return false end
   store().items[id] = nil
+  Wishlist.Refresh()
   return true, entry
 end
 
@@ -126,6 +127,7 @@ function Wishlist.ScanObtained()
       marked = marked + 1
     end
   end
+  if marked > 0 then Wishlist.Refresh() end
   return marked
 end
 
@@ -193,108 +195,71 @@ local function itemTooltip(tooltip, data)
   if type(entry.note) == "string" then tooltip:AddLine(entry.note, 0.7, 0.7, 0.7) end
 end
 
--- Window -------------------------------------------------------------------------------
+-- Summary and card ------------------------------------------------------------------------
 
-local function createWindow()
-  local frame = Gear.NewWindow("HearthkeepWishlistFrame", 520, 110 + ROWS * 20)
-  local function header(x, width)
-    local fs = Gear.Text(frame, "GameFontNormalSmall", width)
-    fs:SetPoint("TOPLEFT", frame, "TOPLEFT", x, -42)
-    return fs
-  end
-  frame.colSlot, frame.colItem, frame.colNote = header(16, 90), header(110, 200), header(314, 150)
-  frame.empty = Gear.Text(frame, "GameFontDisable", 480)
-  frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -64)
-  frame.rows = {}
-  for i = 1, ROWS do
-    local row = CreateFrame("Frame", nil, frame)
-    row:SetSize(490, 20)
-    row:SetPoint("TOPLEFT", frame, "TOPLEFT", 14, -58 - (i - 1) * 20)
-    row.slot = Gear.Text(row, "GameFontHighlightSmall", 90)
-    row.slot:SetPoint("LEFT", row, "LEFT", 2, 0)
-    row.item = Gear.Text(row, "GameFontHighlightSmall", 200)
-    row.item:SetPoint("LEFT", row, "LEFT", 96, 0)
-    row.note = Gear.Text(row, "GameFontHighlightSmall", 150)
-    row.note:SetPoint("LEFT", row, "LEFT", 300, 0)
-    row.remove = Gear.Button(row, 22, 18, function()
-      if row.itemId then
-        Wishlist.Remove(row.itemId)
-        Wishlist.Refresh()
-      end
-    end)
-    row.remove:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    frame.rows[i] = row
-  end
-  frame.prev = Gear.Button(frame, 28, 20, function()
-    window.page = window.page - 1
-    Wishlist.Refresh()
-  end)
-  frame.prev:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -112, 14)
-  frame.pageText = Gear.Text(frame, "GameFontHighlightSmall", 70)
-  frame.pageText:SetPoint("LEFT", frame.prev, "RIGHT", 4, 0)
-  frame.pageText:SetJustifyH("CENTER")
-  frame.next = Gear.Button(frame, 28, 20, function()
-    window.page = window.page + 1
-    Wishlist.Refresh()
-  end)
-  frame.next:SetPoint("LEFT", frame.pageText, "RIGHT", 4, 0)
-  frame.hint = Gear.Text(frame, "GameFontDisableSmall", 340)
-  frame.hint:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 18)
-  return frame
-end
-
-local function paint(frame)
-  frame.title:SetText(HK.L.WANT_TITLE)
-  frame.colSlot:SetText(HK.L.WANT_COL_SLOT)
-  frame.colItem:SetText(HK.L.WANT_COL_ITEM)
-  frame.colNote:SetText(HK.L.WANT_COL_NOTE)
+-- { total, obtained, next = first wanted item not obtained yet (an Entries() row) }.
+function Wishlist.Summary()
   local entries = Wishlist.Entries()
-  local pages = math.max(1, math.ceil(#entries / ROWS))
-  if window.page > pages then window.page = pages end
-  if window.page < 1 then window.page = 1 end
-  frame.empty:SetText(#entries == 0 and HK.L.WANT_EMPTY or "")
-  local first = (window.page - 1) * ROWS
-  for i, row in ipairs(frame.rows) do
-    local item = entries[first + i]
-    row.itemId = item and item.id or nil
-    if item then
-      row:Show()
-      row.slot:SetText(item.slot)
-      local display = item.display
-      if item.entry.obtained == true then display = "|cff40ff40+|r " .. display end
-      row.item:SetText(display)
-      row.note:SetText(type(item.entry.note) == "string" and item.entry.note or "")
-      row.remove:SetText("x")
-    else
-      row:Hide()
+  local got, nextItem = 0, nil
+  for _, item in ipairs(entries) do
+    if item.entry.obtained == true then
+      got = got + 1
+    elseif not nextItem then
+      nextItem = item
     end
   end
-  frame.prev:SetText("<")
-  frame.next:SetText(">")
-  frame.prev:SetShown(window.page > 1)
-  frame.next:SetShown(window.page < pages)
-  frame.pageText:SetText(string.format("%d/%d", window.page, pages))
-  frame.hint:SetText(HK.L.WANT_USAGE)
+  return { total = #entries, obtained = got, next = nextItem }
 end
 
+local function itemQuality(id)
+  return Gear.ItemInfo(id).quality
+end
+
+function Wishlist.Card()
+  local L = HK.L
+  local s = Wishlist.Summary()
+  if s.total == 0 then
+    return { title = L.WANT_TITLE, value = L.WANT_CARD_NONE, sub = L.WANT_CARD_EMPTY, order = 24 }
+  end
+  local sub = L.WANT_CARD_DONE
+  local item = s.next
+  if item then
+    local name = Gear.QualityText(itemQuality(item.id), item.name ~= "" and item.name or ("item:" .. item.id))
+    local note = type(item.entry.note) == "string" and item.entry.note or nil
+    sub = note and string.format(L.WANT_CARD_NEXT_AT, name, note) or string.format(L.WANT_CARD_NEXT, name)
+  end
+  return { title = L.WANT_TITLE, value = string.format(L.WANT_CARD_VALUE, s.obtained, s.total),
+    progress = s.obtained / s.total, sub = sub, order = 24 }
+end
+
+-- Page ------------------------------------------------------------------------------------
+
 function Wishlist.Refresh()
-  Gear.Paint(window, MODULE, paint)
+  Gear.Changed(MODULE)
 end
 
 function Wishlist.Open()
   if not Gear.EnsureOn(MODULE) then return false end
   Wishlist.ScanObtained()
-  return Gear.ShowWindow(window, MODULE, createWindow, paint)
+  return Gear.OpenPage(MODULE)
 end
 
-function Wishlist.Window()
-  return window.frame
+-- Sets or clears the "where it drops" note. Returns true when the item is on the list.
+function Wishlist.SetNote(value, note)
+  local entry = entryFor(Score.ItemId(value))
+  if not entry then return false end
+  local clean = Score.CleanNote(note, 60)
+  if entry.note ~= clean then
+    entry.note = clean
+    Wishlist.Refresh()
+  end
+  return true
 end
 
 local function scanSoon()
   HK:Debounce("HKWishlistScan", 1, function()
     if not HK:IsModuleEnabled(MODULE) then return end
-    if Wishlist.ScanObtained() > 0 then Wishlist.Refresh() end
+    Wishlist.ScanObtained()
   end)
 end
 
@@ -306,6 +271,7 @@ function Wishlist.Start()
     Gear.SafeRegister(MODULE, "LOOT_OPENED", function() Wishlist.OnLootOpened() end)
     Gear.SafeRegister(MODULE, "BAG_UPDATE_DELAYED", scanSoon)
     Gear.SafeRegister(MODULE, "PLAYER_EQUIPMENT_CHANGED", scanSoon)
+    Gear.SafeRegister(MODULE, "GET_ITEM_INFO_RECEIVED", Wishlist.Refresh)
     Gear.HookTooltip(MODULE, "Item", itemTooltip)
   end
   scanSoon()
@@ -341,16 +307,121 @@ local function command(args)
   Wishlist.Refresh()
 end
 
+-- The add box takes the same text as /hk want: an item link or id, then the note.
+function Wishlist.AddFromText(text)
+  text = Gear.Str(text) or ""
+  if text:match("^%s*$") then return false end
+  command(text)
+  return true
+end
+
+local ROW_H = 29
+local READY = "Interface\\RAIDFRAME\\ReadyCheck-Ready"
+
+local function buildRow(r, w)
+  r.icon = UI.Icon(r, 22, "fallback")
+  r.icon:SetPoint("LEFT", r, "LEFT", 6, 0)
+  r.name = Gear.Label(r, "normal", "text", "LEFT", 196)
+  r.name:SetPoint("LEFT", r, "LEFT", 34, 0)
+  r.slot = Gear.Label(r, "small", "muted", "LEFT", 80)
+  r.slot:SetPoint("LEFT", r, "LEFT", 236, 0)
+  local function saveNote(edit)
+    if r.itemId then Wishlist.SetNote(r.itemId, Gear.Str(edit:GetText())) end
+  end
+  r.note = Gear.Input(r, math.max(120, w - 380), 20, saveNote, saveNote)
+  r.note:SetPoint("LEFT", r, "LEFT", 320, 0)
+  r.got = UI.Icon(r, 16, READY)
+  if r.got.SetTexCoord then r.got:SetTexCoord(0, 1, 0, 1) end
+  r.got:SetPoint("RIGHT", r, "RIGHT", -36, 0)
+  r.remove = UI.Button(r, "x", 22, 20, function()
+    if r.itemId then
+      Wishlist.Remove(r.itemId)
+      Wishlist.Refresh()
+    end
+  end)
+  r.remove:SetPoint("RIGHT", r, "RIGHT", -6, 0)
+  r:SetScript("OnEnter", function(self)
+    if not self.itemId then return end
+    Gear.ShowTooltip(self, function(tip)
+      tip:SetHyperlink(type(self.link) == "string" and self.link or ("item:" .. self.itemId))
+    end)
+  end)
+  r:SetScript("OnLeave", Gear.HideTooltip)
+end
+
+local function fillRow(r, item)
+  r.itemId, r.link = item.id, item.entry.link or false
+  Gear.SetIcon(r.icon, Gear.ItemIcon(item.entry.link or item.id) or UI.IconPath("fallback"))
+  local name = item.name ~= "" and item.name or ("item:" .. item.id)
+  r.name:SetText(Gear.QualityText(itemQuality(item.id), name))
+  r.slot:SetText(item.slot)
+  Gear.SetInputText(r.note, type(item.entry.note) == "string" and item.entry.note or "")
+  r.note.placeholder:SetText(HK.L.WANT_NOTE_PLACEHOLDER)
+  r.got:SetShown(item.entry.obtained == true)
+  r.icon:SetAlpha(item.entry.obtained == true and 0.5 or 1)
+end
+
+local function buildPage(holder, w, h)
+  local function add()
+    if Wishlist.AddFromText(Gear.InputText(holder.add)) then Gear.SetInputText(holder.add, "") end
+  end
+  holder.add = Gear.Input(holder, w - 112, 24, add)
+  holder.add:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+  Gear.AcceptLinks(holder.add)
+  holder.addButton = UI.Button(holder, "", 104, 24, add, "primary")
+  holder.addButton:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, 0)
+  holder.hint = Gear.Label(holder, "small", "faint", "LEFT", w - 150)
+  holder.hint:SetPoint("TOPLEFT", holder, "TOPLEFT", 2, -30)
+  holder.summary = Gear.Label(holder, "small", "gold", "RIGHT", 140)
+  holder.summary:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -2, -30)
+  local function column(x)
+    local fs = Gear.Label(holder, "small", "muted", "LEFT", 120)
+    fs:SetPoint("TOPLEFT", holder, "TOPLEFT", x, -50)
+    return fs
+  end
+  holder.colItem, holder.colSlot, holder.colNote = column(34), column(236), column(320)
+  holder.colGot = Gear.Label(holder, "small", "muted", "RIGHT", 60)
+  holder.colGot:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -30, -50)
+  local listH = math.max(ROW_H, h - 66)
+  holder.list = UI.List(holder, w, listH, ROW_H, function(r) buildRow(r, w) end, fillRow)
+  holder.list:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -66)
+  holder.empty = UI.Text(holder.list, "normal", "muted", "CENTER")
+  holder.empty:SetPoint("CENTER", holder.list, "CENTER", 0, 0)
+  holder.empty:SetWidth(380)
+end
+
+local function paintPage(holder)
+  local L = HK.L
+  holder.add.placeholder:SetText(L.WANT_ADD_PLACEHOLDER)
+  holder.addButton:SetLabel(L.WANT_ADD)
+  holder.hint:SetText(L.WANT_ADD_HINT)
+  holder.colItem:SetText(string.upper(L.WANT_COL_ITEM))
+  holder.colSlot:SetText(string.upper(L.WANT_COL_SLOT))
+  holder.colNote:SetText(string.upper(L.WANT_COL_NOTE))
+  holder.colGot:SetText(string.upper(L.WANT_COL_GOT))
+  local entries = Wishlist.Entries()
+  local got = 0
+  for _, item in ipairs(entries) do
+    if item.entry.obtained == true then got = got + 1 end
+  end
+  holder.summary:SetText(#entries > 0 and string.format(L.WANT_CARD_VALUE, got, #entries) or "")
+  holder.empty:SetText(#entries == 0 and L.WANT_EMPTY or "")
+  holder.list:SetItems(entries)
+end
+
 HK:RegisterModule(MODULE, {
   group = "combat",
+  section = "gear",
   title = "MOD_WISHLIST",
   desc = "MOD_WISHLIST_DESC",
   default = false,
   presets = { minimal = false, recommended = true },
   command = "want",
   Open = function() Wishlist.Open() end,
+  Card = function() return Wishlist.Card() end,
+  Page = Gear.MakePage(MODULE, buildPage, paintPage),
   OnEnable = function() Wishlist.Start() end,
-  OnDisable = function() Gear.HideWindow(window) end,
+  OnDisable = function() Wishlist.Refresh() end,
 })
 
 HK:RegisterCommand("want", command, "want <item link> [where it drops] | want remove <link|id> - your wishlist")

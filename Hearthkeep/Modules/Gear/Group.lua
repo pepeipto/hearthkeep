@@ -1,12 +1,14 @@
 local _, HK = ...
 
--- Group: a window with the party or raid (name, class, level) plus the Hearthkeep version
--- and gear score of members who also run Hearthkeep. Each player shares only their own
--- score and version over the addon channel "HKGroup" (PARTY, RAID or INSTANCE_CHAT), when
--- the group or the score changes, at most once every 10 seconds, and only once every
--- equipped item has loaded. Received messages are accepted only from current group
--- members (name, then the unit's player GUID), parsed strictly, capped, never answered.
+-- Group: a page with the party or raid (name, class, level) plus the Hearthkeep version
+-- and gear score of members who also run Hearthkeep, and a home card while in a group.
+-- Each player shares only their own score and version over the addon channel "HKGroup"
+-- (PARTY, RAID or INSTANCE_CHAT), when the group or the score changes, at most once every
+-- 10 seconds, and only once every equipped item has loaded. Received messages are accepted
+-- only from current group members (name, then the unit's player GUID), parsed strictly,
+-- capped, never answered.
 local Score, Gear = HK.GearScore, HK.Gear
+local UI = HK.UI
 local Group = {}
 HK.Group = Group
 
@@ -16,7 +18,6 @@ local GAP = 10
 local ROWS = 40
 local CHANNELS = { PARTY = true, RAID = true, INSTANCE_CHAT = true }
 
-local window = {}
 local peers = {}
 local lastSent, lastMessage = nil, nil
 local rosterChanged = true
@@ -187,97 +188,161 @@ function Group.Request(roster)
   HK:Debounce("HKGroupSend", Score.NextDelay(Gear.Now(), lastSent, GAP, 2), Group.SendNow)
 end
 
--- Window --------------------------------------------------------------------------------
-
-local COLUMNS = { { "name", 0, 120 }, { "class", 124, 90 }, { "level", 218, 40 },
-  { "version", 262, 70 }, { "score", 336, 60 } }
-
-local function createWindow()
-  local frame = Gear.NewWindow("HearthkeepGroupFrame", 430, 90 + (ROWS + 1) * 13)
-  frame.header, frame.rows = {}, {}
-  for _, col in ipairs(COLUMNS) do
-    local fs = Gear.Text(frame, "GameFontNormalSmall", col[3])
-    fs:SetPoint("TOPLEFT", frame, "TOPLEFT", 16 + col[2], -42)
-    frame.header[col[1]] = fs
-  end
-  for i = 1, ROWS do
-    local row = {}
-    for _, col in ipairs(COLUMNS) do
-      local fs = Gear.Text(frame, "GameFontHighlightSmall", col[3])
-      fs:SetPoint("TOPLEFT", frame, "TOPLEFT", 16 + col[2], -42 - i * 13)
-      row[col[1]] = fs
-    end
-    frame.rows[i] = row
-  end
-  frame.note = Gear.Text(frame, "GameFontDisableSmall", 400)
-  frame.note:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 16, 14)
-  return frame
-end
+-- Members, card and page -------------------------------------------------------------------
 
 local function classColor(token, text)
   local colors = _G.RAID_CLASS_COLORS
   local color = token and type(colors) == "table" and colors[token]
   if type(color) == "table" and Gear.Num(color.r) and Gear.Num(color.g) and Gear.Num(color.b) then
-    local function byte(v) return math.max(0, math.min(255, math.floor(v * 255 + 0.5))) end
-    return string.format("|cff%02x%02x%02x%s|r", byte(color.r), byte(color.g), byte(color.b), text)
+    return Gear.ColorText(color.r, color.g, color.b, text)
   end
   return text
 end
 
--- Rows for the window: { name, class, level, version, score } as text.
-function Group.Rows()
-  local rows = {}
+-- { { key, name, colored, class, classToken, level, isMe, hasHK, version, score } } for the
+-- roster; version and score are known for the player and members who shared them.
+function Group.Members()
+  local list = {}
   local myKey = Group.MyKey()
   for _, entry in ipairs(Group.Roster()) do
-    local version, score = "-", "-"
-    if entry.key == myKey then
-      version = HK.Version and HK.Version.Current() or "-"
+    local m = { key = entry.key, name = entry.name, colored = classColor(entry.classToken, entry.name),
+      class = entry.class, classToken = entry.classToken, level = entry.level, isMe = entry.key == myKey }
+    if m.isMe then
+      m.hasHK = true
+      m.version = HK.Version and HK.Version.Current() or nil
       local s, counted = Gear.PlayerScore()
-      if counted > 0 then score = Score.Format(s) end
+      if counted > 0 then m.score = s end
     elseif peers[entry.key] then
-      version = peers[entry.key].version
-      score = Score.Format(peers[entry.key].score)
+      m.hasHK = true
+      m.version = peers[entry.key].version
+      m.score = peers[entry.key].score
     end
+    list[#list + 1] = m
+  end
+  return list
+end
+
+-- Rows as text: { name, class, level, version, score }.
+function Group.Rows()
+  local rows = {}
+  for _, m in ipairs(Group.Members()) do
     rows[#rows + 1] = {
-      name = classColor(entry.classToken, entry.name), class = entry.class or "",
-      level = entry.level and tostring(entry.level) or "?", version = version, score = score,
+      name = m.colored, class = m.class or "", level = m.level and tostring(m.level) or "?",
+      version = m.version or "-", score = m.score and Score.Format(m.score) or "-",
     }
   end
   return rows
 end
 
-local function paint(frame)
-  frame.title:SetText(HK.L.GROUP_TITLE)
-  for _, col in ipairs(COLUMNS) do
-    frame.header[col[1]]:SetText(HK.L["GROUP_COL_" .. col[1]:upper()])
-  end
-  local rows = Group.Rows()
-  for i, widgets in ipairs(frame.rows) do
-    local row = rows[i]
-    for _, col in ipairs(COLUMNS) do
-      widgets[col[1]]:SetText(row and row[col[1]] or "")
+-- { members, withHK, best, average } (best and average are nil when no score is known).
+function Group.Summary(members)
+  members = members or Group.Members()
+  local withHK, total, known, best = 0, 0, 0, nil
+  for _, m in ipairs(members) do
+    if m.hasHK then withHK = withHK + 1 end
+    if m.score then
+      total, known = total + m.score, known + 1
+      if not best or m.score > best then best = m.score end
     end
   end
-  if not Group.Available() then
-    frame.note:SetText(HK.L.GROUP_NO_MESSAGES)
-  elseif not Group.Channel() then
-    frame.note:SetText(HK.L.GROUP_ALONE)
-  else
-    frame.note:SetText("")
-  end
+  return { members = #members, withHK = withHK, best = best, average = known > 0 and total / known or nil }
+end
+
+-- No card while alone.
+function Group.Card()
+  if not Group.Channel() then return nil end
+  local L = HK.L
+  local s = Group.Summary()
+  local sub = s.average and string.format(L.GROUP_CARD_AVG, Score.Format(s.average)) or L.GROUP_CARD_NO_SCORES
+  return { title = L.GROUP_TITLE, value = string.format(L.GROUP_CARD_VALUE, s.members, s.withHK), sub = sub,
+    order = 30 }
 end
 
 function Group.Refresh()
-  Gear.Paint(window, MODULE, paint)
+  Gear.Changed(MODULE)
 end
 
 function Group.Open()
-  if not Gear.EnsureOn(MODULE) then return false end
-  return Gear.ShowWindow(window, MODULE, createWindow, paint)
+  return Gear.OpenPage(MODULE)
 end
 
-function Group.Window()
-  return window.frame
+local ROW_H = 26
+-- x, width of each column.
+local COL = { name = { 10, 150 }, level = { 166, 40 }, score = { 212, 220 }, version = { 440, 60 } }
+
+local function buildRow(r)
+  r.name = Gear.Label(r, "normal", "text", "LEFT", COL.name[2])
+  r.name:SetPoint("LEFT", r, "LEFT", COL.name[1], 0)
+  r.level = Gear.Label(r, "small", "text", "LEFT", COL.level[2])
+  r.level:SetPoint("LEFT", r, "LEFT", COL.level[1], 0)
+  r.bar = UI.Bar(r, 150, 8)
+  r.bar:SetPoint("LEFT", r, "LEFT", COL.score[1], 0)
+  r.score = Gear.Label(r, "small", "gold", "LEFT", 60)
+  r.score:SetPoint("LEFT", r.bar, "RIGHT", 8, 0)
+  r.version = Gear.Label(r, "small", "muted", "LEFT", COL.version[2])
+  r.version:SetPoint("LEFT", r, "LEFT", COL.version[1], 0)
+  r.badge = UI.Panel(r, "select", "good")
+  r.badge:SetSize(78, 16)
+  r.badge:SetPoint("RIGHT", r, "RIGHT", -6, 0)
+  r.badge.text = Gear.Label(r.badge, "small", "good", "CENTER", 74)
+  r.badge.text:SetPoint("CENTER", r.badge, "CENTER", 0, 0)
+end
+
+local function fillRow(r, m)
+  r.name:SetText(m.isMe and (m.colored .. UI.Hex("faint") .. " *|r") or m.colored)
+  r.level:SetText(m.level and tostring(m.level) or "?")
+  local best = r.best
+  r.bar:SetShown(m.score ~= nil)
+  if m.score then
+    r.bar:SetValue(best and best > 0 and m.score / best or 0)
+    r.bar:SetColorKey(m.score == best and "good" or "bar")
+  end
+  r.score:SetText(m.score and Score.Format(m.score) or "-")
+  UI.SetTextColorKey(r.score, m.score and "gold" or "faint")
+  r.version:SetText(m.version or "-")
+  r.badge:SetShown(m.hasHK == true)
+  r.badge.text:SetText("Hearthkeep")
+end
+
+local function buildPage(holder, w, h)
+  local function header(key, x, width)
+    local fs = Gear.Label(holder, "small", "muted", "LEFT", width)
+    fs:SetPoint("TOPLEFT", holder, "TOPLEFT", x, 0)
+    holder["col" .. key] = fs
+  end
+  header("Name", COL.name[1], COL.name[2])
+  header("Level", COL.level[1], COL.level[2])
+  header("Score", COL.score[1], COL.score[2])
+  header("Version", COL.version[1], COL.version[2])
+  local listH = math.max(ROW_H, h - 18 - 26)
+  holder.list = UI.List(holder, w, listH, ROW_H, buildRow, function(r, m)
+    r.best = holder.best
+    fillRow(r, m)
+  end)
+  holder.list:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -18)
+  holder.note = Gear.Label(holder, "small", "faint", "LEFT", w - 10)
+  holder.note:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 4, 4)
+end
+
+local function paintPage(holder)
+  local L = HK.L
+  holder.colName:SetText(string.upper(L.GROUP_COL_NAME))
+  holder.colLevel:SetText(string.upper(L.GROUP_COL_LEVEL))
+  holder.colScore:SetText(string.upper(L.GROUP_COL_SCORE))
+  holder.colVersion:SetText(string.upper(L.GROUP_COL_VERSION))
+  local members = Group.Members()
+  local s = Group.Summary(members)
+  holder.best = s.best or false
+  holder.list:SetItems(members)
+  if not Group.Available() then
+    holder.note:SetText(L.GROUP_NO_MESSAGES)
+  elseif not Group.Channel() then
+    holder.note:SetText(L.GROUP_ALONE)
+  else
+    local note = string.format(L.GROUP_CARD_VALUE, s.members, s.withHK)
+    if s.average then note = note .. " · " .. string.format(L.GROUP_CARD_AVG, Score.Format(s.average)) end
+    holder.note:SetText(note)
+  end
 end
 
 function Group.Start()
@@ -294,7 +359,10 @@ function Group.Start()
       Group.Refresh()
     end)
     Gear.SafeRegister(MODULE, "PLAYER_ENTERING_WORLD", function() Group.Request(true) end)
-    Gear.SafeRegister(MODULE, "PLAYER_EQUIPMENT_CHANGED", function() Group.Request(false) end)
+    Gear.SafeRegister(MODULE, "PLAYER_EQUIPMENT_CHANGED", function()
+      Group.Request(false)
+      Group.Refresh()
+    end)
     Gear.SafeRegister(MODULE, "GET_ITEM_INFO_RECEIVED", function()
       if waitingForItems then Group.Request(false) end
     end)
@@ -307,14 +375,17 @@ end
 
 HK:RegisterModule(MODULE, {
   group = "combat",
+  section = "group",
   title = "MOD_GROUP",
   desc = "MOD_GROUP_DESC",
   default = false,
   presets = { minimal = false, recommended = true },
   command = "group",
   Open = function() Group.Open() end,
+  Card = function() return Group.Card() end,
+  Page = Gear.MakePage(MODULE, buildPage, paintPage),
   OnEnable = function() Group.Start() end,
-  OnDisable = function() Gear.HideWindow(window) end,
+  OnDisable = function() Group.Refresh() end,
 })
 
 HK:RegisterCommand("group", function() Group.Open() end, "group - your party or raid with Hearthkeep scores")

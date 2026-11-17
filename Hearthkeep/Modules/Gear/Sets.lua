@@ -1,17 +1,17 @@
 local _, HK = ...
 
 -- Sets: save what you wear as a named set (an item link per slot) and put it back on.
--- Optional auto-swap: a set named "mounted" while mounted and one named "resting" while
--- resting; when neither applies, the gear worn before the swap comes back. Equipping only
--- happens out of combat; items that are not in the bags are skipped.
+-- Optional auto-swap: one set while mounted and one while resting (picked on the page; by
+-- default the sets named "mounted" and "resting"); when neither applies, the gear worn
+-- before the swap comes back. Equipping only happens out of combat; items that are not in
+-- the bags are skipped.
 local Score, Gear = HK.GearScore, HK.Gear
+local UI = HK.UI
 local Sets = {}
 HK.Sets = Sets
 
 local MODULE = "Sets"
 local MAX_SETS = 20
-local ROWS = 10
-local window = {}
 local started = false
 Sets.pending = false
 
@@ -306,6 +306,40 @@ local function wearAuto(d, target, setName, active)
   end)
 end
 
+-- The set worn for an auto-swap kind ("mounted" | "resting"): the one picked on the page,
+-- else the set named like the kind. nil when there is none (or "none" was picked).
+function Sets.AutoSet(kind)
+  local d = store()
+  local chosen = type(d.autoSets) == "table" and d.autoSets[kind]
+  if chosen == false then return nil end
+  if type(chosen) == "string" then
+    local found = Sets.Find(chosen)
+    if found then return found end
+  end
+  return Sets.Find(kind)
+end
+
+-- Picks the next saved set (then "none", then the first again) for an auto-swap kind.
+-- Returns the set now used, or nil for none.
+function Sets.CycleAuto(kind)
+  if kind ~= "mounted" and kind ~= "resting" then return nil end
+  local d = store()
+  if type(d.autoSets) ~= "table" then d.autoSets = {} end
+  local names, current = Sets.Names(), Sets.AutoSet(kind)
+  local pick = names[1] or false
+  if current then
+    pick = false
+    for i, name in ipairs(names) do
+      if name == current then pick = names[i + 1] or false end
+    end
+  end
+  d.autoSets[kind] = pick
+  triedTarget = nil
+  HK:Debounce("HKSetsAuto", 0.5, Sets.CheckAuto)
+  Sets.Refresh()
+  return Sets.AutoSet(kind)
+end
+
 function Sets.CheckAuto()
   if not HK:IsModuleEnabled(MODULE) then return false end
   local d = store()
@@ -322,7 +356,7 @@ function Sets.CheckAuto()
   end
   local target, mountedSet, restingSet
   if d.auto == true then
-    mountedSet, restingSet = Sets.Find("mounted"), Sets.Find("resting")
+    mountedSet, restingSet = Sets.AutoSet("mounted"), Sets.AutoSet("resting")
     target = Score.AutoTarget(Gear.Bool(MODULE, "IsMounted"), Gear.Bool(MODULE, "IsResting"),
       mountedSet ~= nil, restingSet ~= nil)
   end
@@ -345,7 +379,11 @@ function Sets.SetAuto(on)
   return d.auto
 end
 
--- Commands and window -------------------------------------------------------------------
+-- Commands --------------------------------------------------------------------------------
+
+function Sets.Refresh()
+  Gear.Changed(MODULE)
+end
 
 function Sets.Run(action, name)
   if action == "save" then
@@ -379,84 +417,142 @@ function Sets.Run(action, name)
   Sets.Refresh()
 end
 
-local function saveFromWindow()
-  local frame = window.frame
-  if not frame then return end
-  Sets.Run("save", frame.nameBox:GetText())
-  frame.nameBox:SetText("")
-  if frame.nameBox.ClearFocus then frame.nameBox:ClearFocus() end
+-- Number of items a saved set holds.
+function Sets.Size(name)
+  local n = 0
+  for _ in pairs(Sets.Get(name) or {}) do n = n + 1 end
+  return n
 end
 
-local function createWindow()
-  local frame = Gear.NewWindow("HearthkeepSetsFrame", 330, 120 + ROWS * 24)
-  frame.nameBox = CreateFrame("EditBox", nil, frame, "InputBoxTemplate")
-  frame.nameBox:SetSize(180, 20)
-  frame.nameBox:SetPoint("TOPLEFT", frame, "TOPLEFT", 22, -44)
-  frame.nameBox:SetAutoFocus(false)
-  frame.nameBox:SetMaxLetters(32)
-  frame.nameBox:SetScript("OnEscapePressed", function(self) self:ClearFocus() end)
-  frame.nameBox:SetScript("OnEnterPressed", saveFromWindow)
-  frame.save = Gear.Button(frame, 100, 22, saveFromWindow)
-  frame.save:SetPoint("LEFT", frame.nameBox, "RIGHT", 10, 0)
-  frame.empty = Gear.Text(frame, "GameFontDisable", 290)
-  frame.empty:SetPoint("TOPLEFT", frame, "TOPLEFT", 18, -80)
-  frame.rows = {}
-  for i = 1, ROWS do
-    local row = CreateFrame("Frame", nil, frame)
-    row:SetSize(298, 22)
-    row:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -76 - (i - 1) * 24)
-    row.label = Gear.Text(row, "GameFontHighlight", 140)
-    row.label:SetPoint("LEFT", row, "LEFT", 2, 0)
-    row.equip = Gear.Button(row, 72, 20, function() Sets.Run("equip", row.setName) end)
-    row.equip:SetPoint("RIGHT", row, "RIGHT", -76, 0)
-    row.delete = Gear.Button(row, 72, 20, function() Sets.Run("delete", row.setName) end)
-    row.delete:SetPoint("RIGHT", row, "RIGHT", 0, 0)
-    frame.rows[i] = row
-  end
-  frame.auto = CreateFrame("CheckButton", nil, frame, "UICheckButtonTemplate")
-  frame.auto:SetSize(24, 24)
-  frame.auto:SetPoint("BOTTOMLEFT", frame, "BOTTOMLEFT", 12, 12)
-  frame.auto:SetScript("OnClick", function(self)
-    Sets.SetAuto(self:GetChecked() and true or false)
-    Sets.Refresh()
-  end)
-  frame.autoLabel = Gear.Text(frame, "GameFontHighlightSmall", 270)
-  frame.autoLabel:SetPoint("LEFT", frame.auto, "RIGHT", 4, 0)
-  return frame
-end
-
-local function paint(frame)
-  frame.title:SetText(HK.L.SETS_TITLE)
-  frame.save:SetText(HK.L.SETS_SAVE)
-  local names = Sets.Names()
-  frame.empty:SetText(#names == 0 and HK.L.SETS_EMPTY or "")
-  for i, row in ipairs(frame.rows) do
-    local name = names[i]
-    row.setName = name
-    if name then
-      row:Show()
-      row.label:SetText(name)
-      row.equip:SetText(HK.L.SETS_EQUIP)
-      row.delete:SetText(HK.L.SETS_DELETE)
-    else
-      row:Hide()
+-- The first saved set whose every item is worn right now, or nil.
+function Sets.Worn()
+  local now = Gear.EquippedLinks("player")
+  for _, name in ipairs(Sets.Names()) do
+    local any, match = false, true
+    for slot, link in pairs(Sets.Get(name) or {}) do
+      any = true
+      if Score.ItemId(link) ~= Score.ItemId(now[slot]) then
+        match = false
+        break
+      end
     end
+    if any and match then return name end
   end
-  frame.auto:SetChecked(Sets.AutoOn())
-  frame.autoLabel:SetText(HK.L.SETS_AUTO)
+  return nil
 end
 
-function Sets.Refresh()
-  Gear.Paint(window, MODULE, paint)
+function Sets.Card()
+  local L = HK.L
+  local names = Sets.Names()
+  if #names == 0 then return nil end
+  local sub
+  if Sets.AutoOn() then
+    sub = string.format(L.SETS_CARD_AUTO_ON, Sets.AutoSet("mounted") or L.SETS_NONE,
+      Sets.AutoSet("resting") or L.SETS_NONE)
+  else
+    sub = string.format(L.SETS_CARD_AUTO_OFF, #names)
+  end
+  local worn = Sets.Worn()
+  return { title = L.SETS_TITLE, value = worn or L.SETS_CARD_NONE, valueColor = not worn and "muted" or nil,
+    sub = sub, order = 26 }
+end
+
+-- Page ------------------------------------------------------------------------------------
+
+local ROW_H = 30
+
+local function saveFromPage(holder)
+  local name = Gear.InputText(holder.nameBox)
+  Sets.Run("save", name)
+  if Sets.Find(name) then Gear.SetInputText(holder.nameBox, "") end
+end
+
+local function buildRow(r)
+  r.icon = UI.Icon(r, 20, "gear")
+  r.icon:SetPoint("LEFT", r, "LEFT", 8, 0)
+  r.name = Gear.Label(r, "normal", "text", "LEFT", 170)
+  r.name:SetPoint("LEFT", r, "LEFT", 36, 0)
+  r.info = Gear.Label(r, "small", "muted", "LEFT", 110)
+  r.info:SetPoint("LEFT", r, "LEFT", 210, 0)
+  r.delete = UI.Button(r, "", 70, 22, function() if r.setName then Sets.Run("delete", r.setName) end end)
+  r.delete:SetPoint("RIGHT", r, "RIGHT", -6, 0)
+  r.saveOver = UI.Button(r, "", 84, 22, function() if r.setName then Sets.Run("save", r.setName) end end)
+  r.saveOver:SetPoint("RIGHT", r.delete, "LEFT", -4, 0)
+  r.equip = UI.Button(r, "", 70, 22, function() if r.setName then Sets.Run("equip", r.setName) end end, "primary")
+  r.equip:SetPoint("RIGHT", r.saveOver, "LEFT", -4, 0)
+end
+
+local function fillRow(r, item)
+  local L = HK.L
+  r.setName = item.name
+  r.name:SetText(item.name)
+  UI.SetTextColorKey(r.name, item.worn and "gold" or "text")
+  local info = item.size == 1 and L.SETS_ITEM_ONE or string.format(L.SETS_ITEMS, item.size)
+  if item.worn then info = info .. "  " .. UI.Hex("good") .. L.SETS_WORN .. "|r" end
+  if item.auto then info = info .. "  " .. UI.Hex("bar") .. item.auto .. "|r" end
+  r.info:SetText(info)
+  r.equip:SetLabel(L.SETS_EQUIP)
+  r.saveOver:SetLabel(L.SETS_SAVE_OVER)
+  r.delete:SetLabel(L.SETS_DELETE)
+end
+
+local function buildPage(holder, w, h)
+  holder.nameBox = Gear.Input(holder, w - 150, 24, function() saveFromPage(holder) end)
+  holder.nameBox:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+  if holder.nameBox.edit.SetMaxLetters then holder.nameBox.edit:SetMaxLetters(32) end
+  holder.save = UI.Button(holder, "", 142, 24, function() saveFromPage(holder) end, "primary")
+  holder.save:SetPoint("TOPRIGHT", holder, "TOPRIGHT", 0, 0)
+  local autoH = 66
+  local listH = math.max(ROW_H, h - 34 - autoH - 10)
+  holder.list = UI.List(holder, w, listH, ROW_H, buildRow, fillRow)
+  holder.list:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -34)
+  holder.empty = UI.Text(holder.list, "normal", "muted", "CENTER")
+  holder.empty:SetPoint("CENTER", holder.list, "CENTER", 0, 0)
+  holder.empty:SetWidth(380)
+  local auto = UI.Panel(holder, "card", "line")
+  auto:SetPoint("BOTTOMLEFT", holder, "BOTTOMLEFT", 0, 0)
+  auto:SetSize(w, autoH)
+  holder.auto = auto
+  auto.title = Gear.Label(auto, "normal", "gold", "LEFT", 160)
+  auto.title:SetPoint("TOPLEFT", auto, "TOPLEFT", 12, -12)
+  auto.toggle = UI.Toggle(auto, function(want)
+    local on = Sets.SetAuto(want)
+    Sets.Refresh()
+    return on
+  end)
+  auto.toggle:SetPoint("LEFT", auto.title, "RIGHT", 6, 0)
+  auto.hint = Gear.Label(auto, "small", "muted", "LEFT", w - 24)
+  auto.hint:SetPoint("BOTTOMLEFT", auto, "BOTTOMLEFT", 12, 10)
+  auto.resting = UI.Button(auto, "", 150, 22, function() Sets.CycleAuto("resting") end)
+  auto.resting:SetPoint("TOPRIGHT", auto, "TOPRIGHT", -10, -8)
+  auto.mounted = UI.Button(auto, "", 150, 22, function() Sets.CycleAuto("mounted") end)
+  auto.mounted:SetPoint("RIGHT", auto.resting, "LEFT", -6, 0)
+end
+
+local function paintPage(holder)
+  local L = HK.L
+  holder.nameBox.placeholder:SetText(L.SETS_NAME_PLACEHOLDER)
+  holder.save:SetLabel(L.SETS_SAVE)
+  local worn = Sets.Worn()
+  local mounted, resting = Sets.AutoSet("mounted"), Sets.AutoSet("resting")
+  local items = {}
+  for _, name in ipairs(Sets.Names()) do
+    local auto
+    if name == mounted then auto = L.SETS_TAG_MOUNTED elseif name == resting then auto = L.SETS_TAG_RESTING end
+    items[#items + 1] = { name = name, size = Sets.Size(name), worn = name == worn, auto = auto }
+  end
+  holder.list:SetItems(items)
+  holder.empty:SetText(#items == 0 and L.SETS_EMPTY or "")
+  local auto = holder.auto
+  auto.title:SetText(L.SETS_AUTO)
+  auto.toggle:SetState(Sets.AutoOn())
+  auto.hint:SetText(L.SETS_AUTO_HINT)
+  auto.mounted:SetLabel(string.format(L.SETS_MOUNTED, mounted or L.SETS_NONE))
+  auto.resting:SetLabel(string.format(L.SETS_RESTING, resting or L.SETS_NONE))
 end
 
 function Sets.Open()
-  if not Gear.EnsureOn(MODULE) then return false end
-  return Gear.ShowWindow(window, MODULE, createWindow, paint)
-end
-
-function Sets.Window()
-  return window.frame
+  return Gear.OpenPage(MODULE)
 end
 
 function Sets.Start()
@@ -469,6 +565,7 @@ function Sets.Start()
     Gear.SafeRegister(MODULE, "PLAYER_UPDATE_RESTING", function() if Sets.AutoOn() then check() end end)
     Gear.SafeRegister(MODULE, "PLAYER_ENTERING_WORLD", function() if Sets.AutoOn() then check() end end)
     Gear.SafeRegister(MODULE, "PLAYER_REGEN_ENABLED", function() if Sets.pending then check() end end)
+    Gear.SafeRegister(MODULE, "PLAYER_EQUIPMENT_CHANGED", Sets.Refresh)
   end
   if Sets.AutoOn() then HK:Debounce("HKSetsAuto", 1, Sets.CheckAuto) end
 end
@@ -494,12 +591,15 @@ end
 
 HK:RegisterModule(MODULE, {
   group = "combat",
+  section = "gear",
   title = "MOD_SETS",
   desc = "MOD_SETS_DESC",
   default = false,
   presets = { minimal = false, recommended = false },
   command = "sets",
   Open = function() Sets.Open() end,
+  Card = function() return Sets.Card() end,
+  Page = Gear.MakePage(MODULE, buildPage, paintPage),
   OnEnable = function() Sets.Start() end,
   OnDisable = function()
     Sets.pending = false
@@ -508,7 +608,7 @@ HK:RegisterModule(MODULE, {
     if d.autoActive then
       if Gear.InCombat() or Sets.busy then clearAuto(d) else restore(d) end
     end
-    Gear.HideWindow(window)
+    Sets.Refresh()
   end,
 })
 
