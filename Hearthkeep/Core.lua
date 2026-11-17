@@ -136,14 +136,21 @@ end
 
 local frame = CreateFrame("Frame")
 
+-- Returns false (and records it in /hk debug) when the client does not know the event,
+-- so a module can keep working with the events that do exist.
 function HK:RegisterEvent(event, handler, moduleName)
   local list = handlers[event]
   if not list then
+    local ok = pcall(frame.RegisterEvent, frame, event)
+    if not ok then
+      if HK.Diag then HK.Diag.Record(moduleName or "Core", "event", "unknown event " .. tostring(event)) end
+      return false
+    end
     list = {}
     handlers[event] = list
-    frame:RegisterEvent(event)
   end
   list[#list + 1] = { fn = handler, module = moduleName }
+  return true
 end
 
 function HK:Debounce(key, delay, fn)

@@ -88,3 +88,22 @@ test("a module registered after login with no default starts at once", function(
   truthy(HK:IsModuleEnabled("Late"))
   eq(started, 1)
 end)
+
+test("an unknown game event is recorded, not raised, and other events still work", function()
+  local HK = Stub.load("Hearthkeep")
+  local real = CreateFrame
+  for _, f in ipairs(Stub.frames) do
+    local orig = f.RegisterEvent
+    f.RegisterEvent = function(self, event)
+      if event == "NOPE_EVENT" then error("Attempt to register unknown event") end
+      return orig(self, event)
+    end
+  end
+  eq(HK:RegisterEvent("NOPE_EVENT", function() end, "Testmod"), false)
+  truthy(HK.Diag.Last("Testmod"))
+  local calls = 0
+  eq(HK:RegisterEvent("PLAYER_MONEY", function() calls = calls + 1 end), true)
+  Stub.fire("PLAYER_MONEY")
+  eq(calls, 1)
+  eq(HK:RegisterEvent("NOPE_EVENT", function() end, "Testmod"), false)
+end)

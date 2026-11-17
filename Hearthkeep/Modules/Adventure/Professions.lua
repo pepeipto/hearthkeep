@@ -388,23 +388,28 @@ function Professions.OnEnable()
   end
   -- One window family: SHOW opens and reads, CLOSE closes, UPDATE reads again a moment
   -- later while the window is still open, ignoring the echo of our own header changes.
-  local function watch(api, show, close, update, key)
+  local function watch(api, show, close, updates, key)
     HK:RegisterEvent(show, function()
       Professions.open[api.kind] = true
       guarded(api)
     end, NAME)
     HK:RegisterEvent(close, function() Professions.open[api.kind] = false end, NAME)
-    HK:RegisterEvent(update, function()
-      if busy or not Professions.open[api.kind] then return end
-      if now() < Professions.quietUntil[api.kind] then return end
-      HK:Debounce(key, 0.3, function()
-        if HK:IsModuleEnabled(NAME) and Professions.open[api.kind] then guarded(api) end
-      end)
-    end, NAME)
+    -- Forever does not know TRADE_SKILL_UPDATE; newer clients use TRADE_SKILL_LIST_UPDATE.
+    -- Whichever exists is used; an unknown one is only noted in /hk debug.
+    for _, update in ipairs(updates) do
+      HK:RegisterEvent(update, function()
+        if busy or not Professions.open[api.kind] then return end
+        if now() < Professions.quietUntil[api.kind] then return end
+        HK:Debounce(key, 0.3, function()
+          if HK:IsModuleEnabled(NAME) and Professions.open[api.kind] then guarded(api) end
+        end)
+      end, NAME)
+    end
   end
-  watch(Professions.TRADE, "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE", "TRADE_SKILL_UPDATE", "HKProfessionsTrade")
+  watch(Professions.TRADE, "TRADE_SKILL_SHOW", "TRADE_SKILL_CLOSE",
+    { "TRADE_SKILL_UPDATE", "TRADE_SKILL_LIST_UPDATE" }, "HKProfessionsTrade")
   if type(_G.GetNumCrafts) == "function" then
-    watch(Professions.CRAFT, "CRAFT_SHOW", "CRAFT_CLOSE", "CRAFT_UPDATE", "HKProfessionsCraft")
+    watch(Professions.CRAFT, "CRAFT_SHOW", "CRAFT_CLOSE", { "CRAFT_UPDATE" }, "HKProfessionsCraft")
   end
 end
 
