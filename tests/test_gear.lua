@@ -776,7 +776,7 @@ test("group messages are accepted only from members, parsed strictly", function(
   HK:EnableModule("Group")
   local G = HK.Group
   truthy(G.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder"))
-  eq(G.Peer("Bob-Thunder"), { score = 812.5, version = "0.2.0" })
+  eq(G.Peer("Bob-Thunder"), { score = 812.5, version = "0.2.0", guid = "Player-1-0001" })
   truthy(G.Receive("HKGroup", "S 700 0.3.0", "PARTY", "Eve-SilverHand"))
   falsy(G.Receive("HKGroup", "S 900 0.2.0", "PARTY", "Mallory-Thunder"))
   falsy(G.Receive("HKGroup", "S 900 0.2.0", "WHISPER", "Bob-Thunder"))
