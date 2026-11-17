@@ -270,7 +270,7 @@ end
 
 -- TRAINER_UPDATE (a purchase, a filter or header change): read everything again a
 -- moment later, once per burst, unless it is the echo of our own changes.
-function Training.OnUpdate()
+function Training.OnTrainerUpdate()
   if busy or not Training.open then return end
   if now() < Training.quietUntil and not Training.dirty then return end
   HK:Debounce("HKTrainingUpdate", 0.2, function()
@@ -382,7 +382,7 @@ function Training.OnEnable()
     Training.Record(true)
   end, NAME)
   HK:RegisterEvent("TRAINER_CLOSED", function() Training.open = false end, NAME)
-  HK:RegisterEvent("TRAINER_UPDATE", function() Training.OnUpdate() end, NAME)
+  HK:RegisterEvent("TRAINER_UPDATE", function() Training.OnTrainerUpdate() end, NAME)
   if type(_G.hooksecurefunc) == "function" and type(_G.BuyTrainerService) == "function" then
     local ok, err = pcall(_G.hooksecurefunc, "BuyTrainerService", function() Training.dirty = true end)
     if not ok then HK.Diag.Record(NAME, "hooksecurefunc", err) end

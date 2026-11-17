@@ -140,22 +140,6 @@ test("QoL.XPGain sees a level-up from the stored level even when the new XP is h
   eq((HK.QoL.XPGain(50, 1200, 80, level, 11, 1200)), 30)
 end)
 
-test("XP and Loot count a quest that crosses a whole level with more XP than before", function()
-  local p = xpPlayer({ xp = 100, max = 1000, rested = 0, level = 10 })
-  local HK = boot()
-  HK:EnableModule("XP")
-  HK:EnableModule("Loot")
-  p.xp, p.max = 300, 1200
-  Stub.setPlayer({ level = 11 })
-  Stub.fire("PLAYER_XP_UPDATE", "player")
-  eq(mod(HK, "XP").state.gained, 1200)
-  eq(mod(HK, "Loot").state.xp, 1200)
-  p.xp = 400
-  Stub.fire("PLAYER_XP_UPDATE", "player")
-  eq(mod(HK, "XP").state.gained, 1300)
-  eq(mod(HK, "Loot").state.xp, 1300)
-end)
-
 test("QoL.Rate is per hour and measures at least one minute", function()
   local HK = boot()
   eq(HK.QoL.Rate(600, 3600), 600)
@@ -287,6 +271,22 @@ test("XP tracks gains across a level-up and shows its HUD box", function()
   truthy(printedContains("XP/hour"))
   SlashCmdList.HEARTHKEEP("xp reset")
   eq(XP.state.gained, 0)
+end)
+
+test("XP and Loot count a quest that crosses a whole level with more XP than before", function()
+  local p = xpPlayer({ xp = 100, max = 1000, rested = 0, level = 10 })
+  local HK = boot()
+  HK:EnableModule("XP")
+  HK:EnableModule("Loot")
+  p.xp, p.max = 300, 1200
+  Stub.setPlayer({ level = 11 })
+  Stub.fire("PLAYER_XP_UPDATE", "player")
+  eq(mod(HK, "XP").state.gained, 1200)
+  eq(mod(HK, "Loot").state.xp, 1200)
+  p.xp = 400
+  Stub.fire("PLAYER_XP_UPDATE", "player")
+  eq(mod(HK, "XP").state.gained, 1300)
+  eq(mod(HK, "Loot").state.xp, 1300)
 end)
 
 test("XP hides at max level", function()
