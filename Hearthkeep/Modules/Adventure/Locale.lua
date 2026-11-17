@@ -47,6 +47,92 @@ function Adventure.WithHeadersExpanded(spec, read)
   return ok, result, changed
 end
 
+-- Page helpers (for the Home window) ---------------------------------------------------
+
+-- A def.Page whose frames are built only out of combat: in combat the build waits for
+-- the next refresh after combat. build(holder, w, h) once, refresh(holder) each paint.
+function Adventure.Page(build, refresh)
+  local function ready(holder)
+    if rawget(holder, "hkBuilt") then return true end
+    if type(InCombatLockdown) == "function" and InCombatLockdown() then return false end
+    holder.hkBuilt = true
+    build(holder, holder.hkW, holder.hkH)
+    return true
+  end
+  return {
+    build = function(holder, w, h)
+      holder.hkW = tonumber(w) or (HK.Home and HK.Home.PAGE_W) or 568
+      holder.hkH = tonumber(h) or (HK.Home and HK.Home.PAGE_H) or 330
+      ready(holder)
+    end,
+    refresh = function(holder)
+      if ready(holder) then refresh(holder) end
+    end,
+  }
+end
+
+local function usableTexture(v)
+  if HK.Compat.IsSecret(v) then return nil end
+  if type(v) == "string" and v ~= "" then return v end
+  if type(v) == "number" and v > 0 then return v end
+  return nil
+end
+
+local function firstTexture(fns, arg)
+  for i = 1, #fns do
+    local fn = fns[i]
+    if type(fn) == "function" then
+      local ok, value = pcall(fn, arg)
+      local texture = ok and usableTexture(value) or nil
+      if texture then return texture end
+    end
+  end
+  return nil
+end
+
+local spellIcons, itemIcons = {}, {}
+
+-- Icon of a spell by name (known spells only on Classic clients), or nil.
+function Adventure.SpellIcon(name)
+  if type(name) ~= "string" or name == "" then return nil end
+  if spellIcons[name] then return spellIcons[name] end
+  local api = type(_G.C_Spell) == "table" and _G.C_Spell or {}
+  local texture = firstTexture({ api.GetSpellTexture or false, _G.GetSpellTexture or false }, name)
+  spellIcons[name] = texture
+  return texture
+end
+
+-- Icon of an item from its link or id, or nil.
+function Adventure.ItemIcon(link)
+  local id = type(link) == "number" and link or (type(link) == "string" and tonumber(link:match("item:(%d+)")))
+  if not id then return nil end
+  if itemIcons[id] then return itemIcons[id] end
+  local api = type(_G.C_Item) == "table" and _G.C_Item or {}
+  local texture = firstTexture({ api.GetItemIconByID or false, _G.GetItemIcon or false }, id)
+  itemIcons[id] = texture
+  return texture
+end
+
+-- Alternate row colour of a UI.List row by its position.
+function Adventure.Stripe(i)
+  return (i % 2 == 0) and "card" or "window"
+end
+
+-- "A, B, C +2 more" from a list of tables with .name (each name once).
+function Adventure.NameList(list, max)
+  local out, seen, extra = {}, {}, 0
+  for _, entry in ipairs(list or {}) do
+    local name = type(entry) == "table" and entry.name
+    if type(name) == "string" and not seen[name] then
+      seen[name] = true
+      if #out < max then out[#out + 1] = name else extra = extra + 1 end
+    end
+  end
+  local text = table.concat(out, ", ")
+  if extra > 0 then text = text .. " " .. HK.L.ADV_MORE:format(extra) end
+  return text
+end
+
 HK.Locale.Register("enUS", {
   MOD_TRAINING = "Training",
   MOD_TRAINING_DESC = "Remembers what your trainers teach. Lists what you can learn now with the total cost, and what comes in the next ten levels, with where you saw it. Reminds you after a level-up.",
@@ -90,6 +176,40 @@ HK.Locale.Register("enUS", {
   WAY_PERCENT = "%.1f%% of the map",
   WAY_COMBAT = "the arrow appears after combat.",
   WAY_NONE = "no waypoint set.",
+
+  ADV_NOTHING_YET = "Nothing recorded yet",
+  ADV_MORE = "+%d more",
+
+  TRAIN_CARD_LEARN = "%d spells to learn · %s",
+  TRAIN_CARD_LEARN_ONE = "%d spell to learn · %s",
+  TRAIN_CARD_VISIT = "visit a trainer once to fill this",
+  TRAIN_CARD_NEXT = "Next at level %d · %s",
+  TRAIN_CARD_DONE = "Up to date",
+  TRAIN_SPELLS = "%d spells",
+  TRAIN_SPELLS_ONE = "%d spell",
+  TRAIN_NEXT_SUMMARY = "Next ten levels: %s, %s",
+  TRAIN_FREE = "free",
+
+  PROF_CARD_OPEN = "open a profession window once to fill this",
+  PROF_CARD_READY = "%d recipes you can make now",
+  PROF_CARD_READY_ONE = "%d recipe you can make now",
+  PROF_SKILL = "%s %d/%d",
+  PROF_SUMMARY = "%d recipes · %d ready to make",
+  PROF_REAGENTS = "Reagents",
+  PROF_PICK = "Pick a recipe to see its reagents.",
+
+  WAY_TARGET = "Current target",
+  WAY_PAGE_NONE = "No waypoint set",
+  WAY_PAGE_HINT = "Type coordinates below, mark the spot where you stand, or reuse a recent one.",
+  WAY_ON_FOOT = "%s on foot",
+  WAY_HERE = "Mark here",
+  WAY_SET_BUTTON = "Set",
+  WAY_CLEAR_BUTTON = "Clear",
+  WAY_NOTE = "Note",
+  WAY_RECENT = "Recent waypoints",
+  WAY_RECENT_EMPTY = "The waypoints you set will appear here.",
+  WAY_GO = "Go",
+  WAY_BAD_INPUT = "Enter X and Y between 0 and 100.",
 })
 
 HK.Locale.Register("esES", {
@@ -134,6 +254,40 @@ HK.Locale.Register("esES", {
   WAY_PERCENT = "%.1f%% del mapa",
   WAY_COMBAT = "la flecha aparece al salir de combate.",
   WAY_NONE = "no hay ningún punto de ruta.",
+
+  ADV_NOTHING_YET = "Aún no hay nada anotado",
+  ADV_MORE = "y %d más",
+
+  TRAIN_CARD_LEARN = "%d hechizos por aprender · %s",
+  TRAIN_CARD_LEARN_ONE = "%d hechizo por aprender · %s",
+  TRAIN_CARD_VISIT = "pásate una vez por tu instructor para rellenar esto",
+  TRAIN_CARD_NEXT = "Lo siguiente, a nivel %d · %s",
+  TRAIN_CARD_DONE = "Lo tienes todo al día",
+  TRAIN_SPELLS = "%d hechizos",
+  TRAIN_SPELLS_ONE = "%d hechizo",
+  TRAIN_NEXT_SUMMARY = "Próximos diez niveles: %s, %s",
+  TRAIN_FREE = "gratis",
+
+  PROF_CARD_OPEN = "abre una vez la ventana de una profesión para rellenar esto",
+  PROF_CARD_READY = "%d recetas que puedes fabricar ya",
+  PROF_CARD_READY_ONE = "%d receta que puedes fabricar ya",
+  PROF_SKILL = "%s %d/%d",
+  PROF_SUMMARY = "%d recetas · %d listas para fabricar",
+  PROF_REAGENTS = "Componentes",
+  PROF_PICK = "Elige una receta para ver sus componentes.",
+
+  WAY_TARGET = "Destino actual",
+  WAY_PAGE_NONE = "No hay ningún punto de ruta",
+  WAY_PAGE_HINT = "Escribe unas coordenadas abajo, marca el sitio donde estás o reutiliza uno reciente.",
+  WAY_ON_FOOT = "%s a pie",
+  WAY_HERE = "Marcar aquí",
+  WAY_SET_BUTTON = "Fijar",
+  WAY_CLEAR_BUTTON = "Borrar",
+  WAY_NOTE = "Nota",
+  WAY_RECENT = "Puntos de ruta recientes",
+  WAY_RECENT_EMPTY = "Aquí aparecerán los puntos de ruta que fijes.",
+  WAY_GO = "Ir",
+  WAY_BAD_INPUT = "Escribe X e Y entre 0 y 100.",
 })
 
 HK.Locale.Register("deDE", {
@@ -178,4 +332,38 @@ HK.Locale.Register("deDE", {
   WAY_PERCENT = "%.1f%% der Karte",
   WAY_COMBAT = "der Pfeil erscheint nach dem Kampf.",
   WAY_NONE = "kein Wegpunkt gesetzt.",
+
+  ADV_NOTHING_YET = "Noch nichts gespeichert",
+  ADV_MORE = "+%d weitere",
+
+  TRAIN_CARD_LEARN = "%d Zauber zu lernen · %s",
+  TRAIN_CARD_LEARN_ONE = "%d Zauber zu lernen · %s",
+  TRAIN_CARD_VISIT = "besuche einmal deinen Lehrer, um das hier zu füllen",
+  TRAIN_CARD_NEXT = "Als Nächstes auf Stufe %d · %s",
+  TRAIN_CARD_DONE = "Alles gelernt",
+  TRAIN_SPELLS = "%d Zauber",
+  TRAIN_SPELLS_ONE = "%d Zauber",
+  TRAIN_NEXT_SUMMARY = "Nächste zehn Stufen: %s, %s",
+  TRAIN_FREE = "kostenlos",
+
+  PROF_CARD_OPEN = "öffne einmal ein Berufsfenster, um das hier zu füllen",
+  PROF_CARD_READY = "%d Rezepte jetzt herstellbar",
+  PROF_CARD_READY_ONE = "%d Rezept jetzt herstellbar",
+  PROF_SKILL = "%s %d/%d",
+  PROF_SUMMARY = "%d Rezepte · %d herstellbar",
+  PROF_REAGENTS = "Reagenzien",
+  PROF_PICK = "Wähle ein Rezept, um seine Reagenzien zu sehen.",
+
+  WAY_TARGET = "Aktuelles Ziel",
+  WAY_PAGE_NONE = "Kein Wegpunkt gesetzt",
+  WAY_PAGE_HINT = "Gib unten Koordinaten ein, markiere deinen Standort oder nutze einen der letzten.",
+  WAY_ON_FOOT = "%s zu Fuß",
+  WAY_HERE = "Hier markieren",
+  WAY_SET_BUTTON = "Setzen",
+  WAY_CLEAR_BUTTON = "Löschen",
+  WAY_NOTE = "Notiz",
+  WAY_RECENT = "Letzte Wegpunkte",
+  WAY_RECENT_EMPTY = "Hier erscheinen die Wegpunkte, die du setzt.",
+  WAY_GO = "Los",
+  WAY_BAD_INPUT = "Gib X und Y zwischen 0 und 100 ein.",
 })

@@ -1,7 +1,7 @@
 local _, HK = ...
 
 -- Training: while a class trainer window is open, record its services (name, rank,
--- level, cost) per character, with the zone where they were seen. The window lists what
+-- level, cost) per character, with the zone where they were seen. The Home page lists what
 -- can be learned now with the total cost, then the next ten levels. A short reminder is
 -- printed once per level-up when something new is learnable.
 local NAME = "Training"
@@ -284,83 +284,176 @@ function Training.CheckLevelUp(newLevel)
   local db = HK.CharDB(NAME)
   if db.reminded == level then return false end
   db.reminded = level
+  Training.Refresh()
   local plan = Training.Plan(db.services, level)
   if #plan.now == 0 then return false end
   print("Hearthkeep: " .. HK.L.TRAIN_REMIND:format(#plan.now, Training.FormatMoney(plan.nowCost)))
   return true
 end
 
--- Window ---------------------------------------------------------------------------
+-- Home card and page -----------------------------------------------------------------
 
-local function createWindow()
-  local frame = CreateFrame("Frame", "HearthkeepTrainingFrame", UIParent, "BackdropTemplate")
-  frame:SetSize(440, 480)
-  frame:SetPoint("CENTER")
-  frame:SetFrameStrata("DIALOG")
-  frame:EnableMouse(true)
-  frame:SetMovable(true)
-  frame:SetClampedToScreen(true)
-  frame:RegisterForDrag("LeftButton")
-  frame:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-  frame:Hide()
-  if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "HearthkeepTrainingFrame") end
-  frame.title = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  frame.title:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -14)
-  frame.close = CreateFrame("Button", nil, frame, "UIPanelCloseButton")
-  frame.close:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -4, -4)
-  frame.close:SetScript("OnClick", function() frame:Hide() end)
-  local scroll = CreateFrame("ScrollFrame", "HearthkeepTrainingScroll", frame, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", frame, "TOPLEFT", 16, -42)
-  scroll:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -34, 16)
-  local child = CreateFrame("Frame", nil, scroll)
-  child:SetSize(380, 10)
-  scroll:SetScrollChild(child)
-  frame.child = child
-  frame.body = child:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  frame.body:SetPoint("TOPLEFT", child, "TOPLEFT", 0, 0)
-  frame.body:SetWidth(380)
-  frame.body:SetJustifyH("LEFT")
-  frame.body:SetJustifyV("TOP")
-  HK.Skins.Track(frame, "window")
-  return frame
+local function hasServices(db)
+  return type(db.services) == "table" and next(db.services) ~= nil
 end
 
-local function paint()
-  local frame = Training.frame
+local function plural(count, many, one)
+  return (count == 1 and one or many):format(count)
+end
+
+-- Dashboard card: what can be learned now (alert), else the next level with something.
+function Training.Card()
+  local L = HK.L
   local db = HK.CharDB(NAME)
-  local hasData = type(db.services) == "table" and next(db.services) ~= nil
+  local card = { title = L.MOD_TRAINING, order = 30 }
+  if not hasServices(db) then
+    card.value, card.sub = L.ADV_NOTHING_YET, L.TRAIN_CARD_VISIT
+    return card
+  end
   local plan = Training.Plan(db.services, playerLevel())
-  frame.title:SetText(HK.L.TRAIN_TITLE)
-  frame.body:SetText(table.concat(Training.Lines(plan, hasData), "\n"))
-  local height = tonumber(frame.body:GetStringHeight()) or 0
-  frame.child:SetHeight(math.max(10, height + 10))
+  if #plan.now > 0 then
+    card.alert = true
+    card.value = (#plan.now == 1 and L.TRAIN_CARD_LEARN_ONE or L.TRAIN_CARD_LEARN)
+      :format(#plan.now, Training.FormatMoney(plan.nowCost))
+    card.sub = HK.Adventure.NameList(plan.now, 4)
+  elseif plan.upcoming[1] then
+    local group = plan.upcoming[1]
+    card.value = L.TRAIN_CARD_NEXT:format(group.level, Training.FormatMoney(group.cost))
+    card.sub = HK.Adventure.NameList(group.entries, 4)
+  else
+    card.value, card.sub = L.TRAIN_CARD_DONE, L.TRAIN_NONE_NEXT
+  end
+  return card
 end
 
+-- Rows of the page timeline: learnable now first (marked), then the next ten levels.
+function Training.Timeline(plan)
+  local items = {}
+  for _, s in ipairs(plan.now) do items[#items + 1] = { service = s, now = true } end
+  for _, group in ipairs(plan.upcoming) do
+    for _, s in ipairs(group.entries) do items[#items + 1] = { service = s, now = false } end
+  end
+  return items
+end
+
+local function buildPage(holder, w, h)
+  local UI = HK.UI
+  local body = CreateFrame("Frame", nil, holder)
+  body:SetAllPoints()
+  holder.body = body
+
+  local head = UI.Panel(body, "card", "line")
+  head:SetPoint("TOPLEFT", body, "TOPLEFT", 0, 0)
+  head:SetSize(w, 50)
+  head.icon = UI.Icon(head, 30, "training")
+  head.icon:SetPoint("LEFT", head, "LEFT", 10, 0)
+  head.label = UI.Text(head, "small", "muted")
+  head.label:SetPoint("TOPLEFT", head.icon, "TOPRIGHT", 10, 2)
+  head.money = UI.Text(head, "large", "gold")
+  head.money:SetPoint("TOPLEFT", head.label, "BOTTOMLEFT", 0, -3)
+  head.count = UI.Text(head, "normal", "text")
+  head.count:SetPoint("LEFT", head.money, "RIGHT", 10, 0)
+  head.level = UI.Text(head, "normal", "gold", "RIGHT")
+  head.level:SetPoint("TOPRIGHT", head, "TOPRIGHT", -12, -9)
+  head.next = UI.Text(head, "small", "muted", "RIGHT")
+  head.next:SetPoint("TOPRIGHT", head.level, "BOTTOMRIGHT", 0, -5)
+  holder.head = head
+
+  local rowH = 26
+  local listH = h - 58 - 14
+  holder.list = UI.List(body, w, listH, rowH, function(row, i)
+    row.stripe = HK.Adventure.Stripe(i)
+    row.accent = row:CreateTexture(nil, "OVERLAY")
+    row.accent:SetPoint("TOPLEFT", row, "TOPLEFT", 0, 0)
+    row.accent:SetPoint("BOTTOMLEFT", row, "BOTTOMLEFT", 0, 0)
+    row.accent:SetWidth(3)
+    row.badge = UI.Panel(row, "barBg", "line")
+    row.badge:SetSize(34, 18)
+    row.badge:SetPoint("LEFT", row, "LEFT", 10, 0)
+    row.badge.text = UI.Text(row.badge, "small", "muted", "CENTER")
+    row.badge.text:SetPoint("CENTER", row.badge, "CENTER", 0, 0)
+    row.icon = UI.Icon(row, 20, "training")
+    row.icon:SetPoint("LEFT", row.badge, "RIGHT", 8, 0)
+    row.name = UI.Text(row, "normal", "text")
+    row.name:SetPoint("LEFT", row.icon, "RIGHT", 8, 0)
+    row.name:SetWidth(w - 350)
+    if row.name.SetWordWrap then row.name:SetWordWrap(false) end
+    row.cost = UI.Text(row, "small", "text", "RIGHT")
+    row.cost:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+    row.cost:SetWidth(90)
+    row.where = UI.Text(row, "small", "faint", "RIGHT")
+    row.where:SetPoint("RIGHT", row.cost, "LEFT", -10, 0)
+    row.where:SetWidth(150)
+    if row.where.SetWordWrap then row.where:SetWordWrap(false) end
+  end, function(row, item)
+    local s = item.service
+    local now = item.now
+    UI.SetPanelColors(row, now and "select" or row.stripe)
+    row.accent:SetColorTexture(UI.Color("good"))
+    row.accent:SetShown(now)
+    UI.SetPanelColors(row.badge, now and "select" or "barBg", now and "good" or "line")
+    row.badge.text:SetText(tostring(s.level or "?"))
+    UI.SetTextColorKey(row.badge.text, now and "good" or "muted")
+    row.icon:SetTexture(HK.Adventure.SpellIcon(s.name) or UI.IconPath("training"))
+    local text = s.name
+    if s.rank then text = text .. "  " .. UI.Hex("muted") .. s.rank .. "|r" end
+    row.name:SetText(text)
+    UI.SetTextColorKey(row.name, now and "gold" or "text")
+    row.where:SetText(s.zone or s.trainer or "")
+    local cost = type(s.cost) == "number" and s.cost or 0
+    row.cost:SetText(cost > 0 and UI.Money(cost) or HK.L.TRAIN_FREE)
+  end)
+  holder.list:SetPoint("TOPLEFT", head, "BOTTOMLEFT", 0, -8)
+  holder.empty = UI.Empty(holder, "")
+end
+
+local function refreshPage(holder)
+  local L, UI = HK.L, HK.UI
+  local db = HK.CharDB(NAME)
+  if not hasServices(db) then
+    holder.body:Hide()
+    holder.empty:SetText(L.TRAIN_EMPTY)
+    holder.empty:Show()
+    return
+  end
+  holder.body:Show()
+  local level = playerLevel()
+  local plan = Training.Plan(db.services, level)
+  local head = holder.head
+  head.label:SetText(L.TRAIN_NOW)
+  if #plan.now > 0 then
+    head.money:SetText(UI.Money(plan.nowCost))
+    head.count:SetText(plural(#plan.now, L.TRAIN_SPELLS, L.TRAIN_SPELLS_ONE))
+  else
+    head.money:SetText(L.TRAIN_NONE_NOW)
+    head.count:SetText("")
+  end
+  UI.SetTextColorKey(head.money, #plan.now > 0 and "gold" or "muted")
+  UI.SetPanelColors(head, "card", #plan.now > 0 and "good" or "line")
+  head.level:SetText(L.HOME_LEVEL .. " " .. tostring(level or "?"))
+  local upcoming, upcomingCost = 0, 0
+  for _, group in ipairs(plan.upcoming) do
+    upcoming = upcoming + #group.entries
+    upcomingCost = upcomingCost + group.cost
+  end
+  head.next:SetText(L.TRAIN_NEXT_SUMMARY:format(plural(upcoming, L.TRAIN_SPELLS, L.TRAIN_SPELLS_ONE),
+    Training.FormatMoney(upcomingCost)))
+  local items = Training.Timeline(plan)
+  holder.list:SetItems(items)
+  holder.empty:SetText(#items == 0 and L.TRAIN_NONE_NEXT or "")
+  holder.empty:SetShown(#items == 0)
+end
+
+Training.Page = HK.Adventure.Page(buildPage, refreshPage)
+
+-- Data changed: the Home window repaints the card or the page if it shows them.
 function Training.Refresh()
-  local frame = Training.frame
-  if not (frame and frame:IsShown()) then return end
-  local ok, err = pcall(paint)
-  if not ok then HK.Diag.Record(NAME, "paint", err) end
+  if HK.Home then HK.Home.Changed(NAME) end
 end
 
 function Training.Open()
   HK.Adventure.EnsureOn(NAME)
-  if not Training.frame then
-    if InCombatLockdown() then
-      print("Hearthkeep: " .. HK.L.ADV_COMBAT)
-      return false
-    end
-    local ok, frame = pcall(createWindow)
-    if not ok then
-      HK.Diag.Record(NAME, "create", frame)
-      return false
-    end
-    Training.frame = frame
-  end
-  Training.frame:Show()
-  Training.Refresh()
-  return true
+  return HK.Home.Open(NAME)
 end
 
 -- Module ---------------------------------------------------------------------------
@@ -391,7 +484,7 @@ function Training.OnEnable()
 end
 
 function Training.OnDisable()
-  if Training.frame then Training.frame:Hide() end
+  -- Nothing on screen of its own: the Home page hides itself while the module is off.
 end
 
 HK:RegisterModule(NAME, Training)

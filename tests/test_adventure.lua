@@ -321,18 +321,136 @@ test("Training ignores secret values and reports API errors without raising", fu
   truthy(#HK.Diag.Last("Training") > 0)
 end)
 
-test("/hk train opens the Training window, Escape-closable, and disable hides it", function()
+local function noErrors(HK, ...)
+  for _, m in ipairs({ "Home", "UI", ... }) do
+    for _, e in ipairs(HK.Diag.Last(m)) do
+      if e.field ~= "features" then eq(m .. " " .. e.field .. ": " .. e.err, nil) end
+    end
+  end
+end
+
+local function frameNamed(name)
+  for _, frame in ipairs(Stub.frames) do if frame.name == name then return frame end end
+end
+
+test("/hk train opens the Training page of the Home window, no window of its own", function()
   local HK = boot()
   UISpecialFrames = {}
   SlashCmdList.HEARTHKEEP("train")
   truthy(HK:IsModuleEnabled("Training"))
+  truthy(HK.Home.frame and HK.Home.frame:IsShown())
+  eq(HK.Home.section, "training")
+  eq(HK.Home.selected, "Training")
+  eq(frameNamed("HearthkeepTrainingFrame"), nil)
+  eq(HK:ModuleInfo("Training").frame, nil)
+  noErrors(HK, "Training")
+end)
+
+local LEARN = {
+  a = { name = "Rend", rank = "Rank 2", level = 10, cost = 600, category = "available", zone = "Elwynn Forest" },
+  b = { name = "Charge", level = 12, cost = 50, category = "unavailable" },
+  c = { name = "Cleave", level = 14, cost = 1000, category = "unavailable" },
+  d = { name = "Hamstring", level = 8, cost = 100, category = "used" },
+}
+
+test("the Training card says what to learn now, else what comes next, else how to fill it", function()
+  local HK = boot()
+  Stub.setPlayer({ level = 12 })
   local T = HK:ModuleInfo("Training")
-  truthy(T.frame and T.frame:IsShown())
-  eq(T.frame.name, "HearthkeepTrainingFrame")
-  eq(UISpecialFrames[1], "HearthkeepTrainingFrame")
-  truthy(T.frame.body.text:find("No trainer recorded", 1, true))
-  HK:DisableModule("Training")
-  falsy(T.frame:IsShown())
+  local card = T.Card()
+  eq(card.title, "Training")
+  eq(card.value, "Nothing recorded yet")
+  truthy(card.sub:find("visit a trainer once", 1, true))
+  falsy(card.alert)
+  HK.CharDB("Training").services = LEARN
+  card = T.Card()
+  eq(card.value, "2 spells to learn · 6s 50c")
+  eq(card.sub, "Rend, Charge")
+  eq(card.alert, true)
+  HK.db.settings.language = "esES"
+  eq(T.Card().value, "2 hechizos por aprender · 6p 50c")
+  HK.db.settings.language = "deDE"
+  eq(T.Card().value, "2 Zauber zu lernen · 6s 50k")
+  HK.db.settings.language = "enUS"
+  Stub.setPlayer({ level = 13 })
+  HK.CharDB("Training").services = { c = LEARN.c }
+  card = T.Card()
+  eq(card.value, "Next at level 14 · 10s")
+  eq(card.sub, "Cleave")
+  falsy(card.alert)
+  HK.CharDB("Training").services = { d = LEARN.d }
+  eq(T.Card().value, "Up to date")
+end)
+
+test("the Training card shows on the Home dashboard, alerts first", function()
+  local HK = boot()
+  HK:EnableModule("Training")
+  Stub.setPlayer({ level = 12 })
+  HK.CharDB("Training").services = LEARN
+  local found
+  for _, card in ipairs(HK.Home.Cards()) do if card.module == "Training" then found = card end end
+  truthy(found, "Training card on the dashboard")
+  eq(found.alert, true)
+  eq(HK.Home.Cards()[1].alert, true)
+end)
+
+test("the Training page lists learnable spells first, highlighted, then the next levels", function()
+  local HK = boot()
+  Stub.setPlayer({ level = 12 })
+  GetSpellTexture = function(name) return name == "Rend" and 132155 or nil end
+  local T = HK:ModuleInfo("Training")
+  local holder = CreateFrame("Frame")
+  T.Page.build(holder, 568, 330)
+  T.Page.refresh(holder)
+  eq(holder.empty.text, HK.L.TRAIN_EMPTY)
+  falsy(holder.body:IsShown())
+  HK.CharDB("Training").services = LEARN
+  T.Page.refresh(holder)
+  truthy(holder.body:IsShown())
+  local items = holder.list.items
+  eq(#items, 3)
+  eq(items[1].service.name, "Rend")
+  eq(items[1].now, true)
+  eq(items[3].service.name, "Cleave")
+  eq(items[3].now, false)
+  truthy(holder.head.money.text:find("6s", 1, true))
+  eq(holder.head.count.text, "2 spells")
+  truthy(holder.head.next.text:find("1 spell, 10s", 1, true))
+  local row = holder.list.rows[1]
+  truthy(row.name.text:find("Rend", 1, true))
+  truthy(row.name.text:find("Rank 2", 1, true))
+  eq(row.badge.text.text, "10")
+  eq(row.where.text, "Elwynn Forest")
+  truthy(row.accent:IsShown())
+  falsy(holder.list.rows[3].accent:IsShown())
+  eq(HK.Adventure.SpellIcon("Rend"), 132155)
+  eq(HK.Adventure.SpellIcon("Nope"), nil)
+  noErrors(HK, "Training")
+end)
+
+test("the Training page waits for the end of combat to build its frames", function()
+  local HK = boot()
+  local T = HK:ModuleInfo("Training")
+  local holder = CreateFrame("Frame")
+  Stub.inCombat = true
+  T.Page.build(holder, 568, 330)
+  T.Page.refresh(holder)
+  eq(holder.list, nil)
+  Stub.inCombat = false
+  T.Page.refresh(holder)
+  truthy(holder.list)
+  noErrors(HK, "Training")
+end)
+
+test("a level-up and a trainer visit tell the Home window to repaint", function()
+  local HK = boot()
+  HK:EnableModule("Training")
+  local changed = {}
+  HK.Home.Changed = function(name) changed[#changed + 1] = name end
+  Stub.fire("PLAYER_LEVEL_UP", 30)
+  trainer(SERVICES)
+  Stub.fire("TRAINER_SHOW")
+  eq(changed, { "Training", "Training" })
 end)
 
 test("the Training window lists now, total and next levels with the place", function()
@@ -520,21 +638,100 @@ test("reagent counts include the bank and show have / need", function()
   truthy(text:find("can make 2", 1, true))
 end)
 
-test("/hk prof opens the Professions window on the first profession", function()
+test("/hk prof opens the Professions page on the best profession", function()
   local HK = boot()
   GetItemCount = function() return 1 end
   SlashCmdList.HEARTHKEEP("prof")
   local P = HK:ModuleInfo("Professions")
-  truthy(P.frame:IsShown())
-  truthy(P.frame.body.text:find("No profession recorded", 1, true))
-  HK.CharDB("Professions").Tailoring = { recipes = {
+  truthy(HK.Home.frame:IsShown())
+  eq(HK.Home.section, "training")
+  eq(HK.Home.selected, "Professions")
+  eq(P.frame, nil)
+  HK.CharDB("Professions").Tailoring = { skill = 40, maxSkill = 75, recipes = {
     bag = { name = "Linen Bag", reagents = { { name = "Bolt of Linen Cloth", count = 3 } } },
   } }
-  P.Refresh()
-  eq(P.selected, "Tailoring")
-  eq(P.frame.tabs[1].profession, "Tailoring")
-  truthy(P.frame.body.text:find("you have 1 / need 3", 1, true))
+  HK.CharDB("Professions").Cooking = { skill = 90, maxSkill = 150, recipes = {} }
+  HK.Home.Refresh()
+  eq(P.selected, "Cooking")
+  noErrors(HK, "Professions")
   eq(#Stub.errors, 0)
+end)
+
+test("a profession window records its skill level", function()
+  local HK = boot()
+  HK:EnableModule("Professions")
+  tradeWindow("Tailoring", { { name = "Bolt of Linen Cloth", kind = "trivial", reagents = {} } })
+  Stub.fire("TRADE_SKILL_SHOW")
+  local db = HK.CharDB("Professions")
+  eq(db.Tailoring.skill, 120)
+  eq(db.Tailoring.maxSkill, 150)
+end)
+
+local function bagCounts(counts)
+  C_Item = { GetItemCount = function(item) return counts[item] or 0 end }
+end
+
+local TAILORING = { skill = 120, maxSkill = 150, recipes = {
+  bolt = { name = "Bolt of Linen Cloth", difficulty = "trivial", link = "|Hitem:2996|h", reagents = { { name = "Linen Cloth", count = 2, link = LINEN } } },
+  bag = { name = "Linen Bag", difficulty = "optimal", reagents = { { name = "Bolt of Linen Cloth", count = 3, link = "|Hitem:2996|h" }, { name = "Coarse Thread", count = 1, link = THREAD } } },
+  shirt = { name = "Brown Linen Shirt", difficulty = "easy", reagents = {} },
+} }
+
+test("the Professions card shows the best skill with a bar and what can be made now", function()
+  local HK = boot()
+  local P = HK:ModuleInfo("Professions")
+  local card = P.Card()
+  eq(card.value, "Nothing recorded yet")
+  truthy(card.sub:find("profession window", 1, true))
+  bagCounts({ [2589] = 5 })
+  HK.CharDB("Professions").Tailoring = TAILORING
+  HK.CharDB("Professions").Cooking = { skill = 30, maxSkill = 75, recipes = {} }
+  card = P.Card()
+  eq(card.value, "Tailoring 120/150")
+  eq(card.progress, 0.8)
+  eq(card.sub, "1 recipe you can make now")
+  HK.db.settings.language = "esES"
+  eq(P.Card().sub, "1 receta que puedes fabricar ya")
+end)
+
+test("the Professions page: picker, skill bar, recipes by difficulty and reagents have / need", function()
+  local HK = boot()
+  local P = HK:ModuleInfo("Professions")
+  bagCounts({ [2589] = 5, [2996] = 1 })
+  local holder = CreateFrame("Frame")
+  P.Page.build(holder, 568, 330)
+  P.Page.refresh(holder)
+  eq(holder.empty.text, HK.L.PROF_EMPTY)
+  HK.CharDB("Professions").Tailoring = TAILORING
+  HK.CharDB("Professions").Cooking = { recipes = {} }
+  P.Page.refresh(holder)
+  eq(P.selected, "Tailoring")
+  eq(holder.picks[1].profession, "Cooking")
+  eq(holder.picks[2].profession, "Tailoring")
+  falsy(holder.picks[3]:IsShown())
+  eq(holder.skillName.text, "Tailoring 120/150")
+  eq(holder.bar.value, 0.8)
+  eq(holder.summary.text, "3 recipes · 1 ready to make")
+  local names = {}
+  for _, row in ipairs(holder.list.items) do names[#names + 1] = row.name end
+  eq(names, { "Linen Bag", "Brown Linen Shirt", "Bolt of Linen Cloth" })
+  truthy(holder.list.rows[1].name.text:find("ff8040", 1, true), "orange for optimal")
+  truthy(holder.list.rows[3].make.text:find("can make 2", 1, true))
+  eq(P.recipe, "Linen Bag")
+  local d = holder.detail
+  eq(d.rows[1].count.text, "1 / 3")
+  eq(d.rows[2].count.text, "0 / 1")
+  falsy(d.rows[3].name:IsShown())
+  P.SelectRecipe("Bolt of Linen Cloth")
+  P.Page.refresh(holder)
+  eq(d.rows[1].name.text, "Linen Cloth")
+  eq(d.rows[1].count.text, "5 / 2")
+  P.Select("Cooking")
+  P.Page.refresh(holder)
+  eq(holder.skillName.text, "Cooking")
+  falsy(holder.bar:IsShown())
+  truthy(d.hint:IsShown())
+  noErrors(HK, "Professions")
 end)
 
 -- Waypoint ---------------------------------------------------------------------------
@@ -767,4 +964,120 @@ test("Waypoint in combat waits to create the arrow until combat ends", function(
   Stub.inCombat = false
   Stub.fire("PLAYER_REGEN_ENABLED")
   truthy(W.frame and W.frame:IsShown())
+end)
+
+test("the Waypoint card shows distance and time with the note, nothing without a target", function()
+  local HK = boot()
+  local W = HK:ModuleInfo("Waypoint")
+  eq(W.Card(), nil)
+  worldMap()
+  GetPlayerFacing = function() return 0 end
+  SlashCmdList.HEARTHKEEP("way 50 40 Inn")
+  local card = W.Card()
+  eq(card.title, "Waypoint")
+  eq(card.value, "100 yd · 0:14")
+  eq(card.sub, "Inn · 50.0, 40.0")
+  C_Map.GetMapInfo = function() return { name = "Elwynn Forest" } end
+  eq(W.Card().sub, "Inn · 50.0, 40.0 · Elwynn Forest")
+  HK.db.settings.language = "esES"
+  eq(W.Card().value, "91 m · 0:14")
+  SlashCmdList.HEARTHKEEP("way clear")
+  eq(W.Card(), nil)
+end)
+
+test("Waypoint keeps the last ten waypoints, newest first, the same spot once", function()
+  local HK = boot()
+  local W = HK:ModuleInfo("Waypoint")
+  worldMap()
+  for i = 1, 12 do SlashCmdList.HEARTHKEEP("way " .. i .. " 20") end
+  SlashCmdList.HEARTHKEEP("way 5 20 again")
+  local recent = W.Recent()
+  eq(#recent, 10)
+  eq(recent[1].note, "again")
+  near(recent[1].x, 0.05)
+  near(recent[2].x, 0.12)
+  local fives = 0
+  for _, entry in ipairs(recent) do if math.abs(entry.x - 0.05) < 1e-9 then fives = fives + 1 end end
+  eq(fives, 1)
+  truthy(W.Reuse(recent[3]))
+  near(W.current.x, recent[3].x)
+  eq(W.Recent()[1].x, W.current.x)
+end)
+
+test("a spot marked where you stand is reached only after walking away and back", function()
+  local HK = boot()
+  local W = HK:ModuleInfo("Waypoint")
+  local player = worldMap()
+  GetPlayerFacing = function() return 0 end
+  truthy(W.MarkHere("Camp"))
+  truthy(W.current, "not reached at once")
+  eq(W.current.away, false)
+  near(W.current.x, 0.5)
+  player.y = 0.45
+  W.Update()
+  eq(W.current.away, true)
+  player.y = 0.5
+  W.Update()
+  eq(W.current, nil)
+  truthy(printedContains("you have arrived: Camp"))
+end)
+
+test("/hk way alone opens the Route page", function()
+  local HK = boot()
+  SlashCmdList.HEARTHKEEP("way")
+  truthy(HK:IsModuleEnabled("Waypoint"))
+  eq(HK.Home.section, "route")
+  eq(HK.Home.selected, "Waypoint")
+  noErrors(HK, "Waypoint")
+end)
+
+test("the Waypoint page shows the target, sets from the inputs and reuses recent ones", function()
+  local HK = boot()
+  local W = HK:ModuleInfo("Waypoint")
+  worldMap()
+  GetPlayerFacing = function() return 0 end
+  local holder = CreateFrame("Frame")
+  W.Page.build(holder, 568, 330)
+  W.Page.refresh(holder)
+  eq(holder.target.distance.text, "No waypoint set")
+  falsy(holder.target.clear:IsShown())
+  eq(holder.recentEmpty.text, HK.L.WAY_RECENT_EMPTY)
+  holder.x.box:SetText("50")
+  holder.y.box:SetText("40,0")
+  holder.note.box:SetText("  Mine  ")
+  truthy(W.SetFromInputs(holder))
+  eq(W.current, { map = 1429, x = 0.5, y = 0.4, note = "Mine" })
+  W.Page.refresh(holder)
+  eq(holder.target.distance.text, "100 yd")
+  eq(holder.target.eta.text, "0:14 on foot")
+  eq(holder.target.place.text, "50.0, 40.0")
+  eq(holder.target.note.text, "Mine")
+  truthy(holder.target.clear:IsShown())
+  eq(#holder.recent.items, 1)
+  eq(holder.recent.rows[1].coords.text, "50.0, 40.0")
+  holder.x.box:SetText("abc")
+  falsy(W.SetFromInputs(holder))
+  eq(holder.error.text, HK.L.WAY_BAD_INPUT)
+  holder.target.clear.scripts.OnClick(holder.target.clear)
+  eq(W.current, nil)
+  local go = holder.recent.rows[1].go
+  go.scripts.OnClick(go)
+  eq(W.current.note, "Mine")
+  noErrors(HK, "Waypoint")
+end)
+
+test("the Waypoint page in the Home window follows the arrow live", function()
+  local HK = boot()
+  local W = HK:ModuleInfo("Waypoint")
+  worldMap()
+  GetPlayerFacing = function() return 0 end
+  SlashCmdList.HEARTHKEEP("way 50 40")
+  truthy(HK.Home.Open("Waypoint"))
+  local holder = W.holder
+  truthy(holder and holder.target, "page built in the Home window")
+  eq(holder.target.distance.text, "100 yd")
+  C_Map.GetPlayerMapPosition = function() return vec(0.5, 0.45) end
+  W.Update()
+  eq(holder.target.distance.text, "50 yd")
+  noErrors(HK, "Waypoint")
 end)
