@@ -278,7 +278,7 @@ function UI.Card(parent, width, height)
   function card.Set(self, data)
     data = data or {}
     self.icon:SetTexture(UI.IconPath(data.icon or "fallback"))
-    self.title:SetText(string.upper(data.title or ""))
+    self.title:SetText(data.title or "")
     self.value:SetText(data.value or "")
     UI.SetTextColorKey(self.value, data.valueColor or (data.alert and "warn") or "gold")
     local hasBar = type(data.progress) == "number"

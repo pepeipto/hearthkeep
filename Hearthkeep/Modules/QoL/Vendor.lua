@@ -7,6 +7,9 @@ local QoL = HK.QoL
 -- the merchant closes. Combat pauses the run; it carries on when combat ends if the
 -- merchant is still open. One summary line in chat.
 local NAME = "Vendor"
+local MAX_VISITS = 5
+local UI = HK.UI
+local Page = QoL.Page
 
 local Vendor = {
   group = "qol", title = "MOD_VENDOR", desc = "MOD_VENDOR_DESC", command = "vendor",
@@ -14,13 +17,31 @@ local Vendor = {
 }
 Vendor.BATCH = 12
 Vendor.DELAY = 0.3
+Vendor.MAX_VISITS = MAX_VISITS
 Vendor.state = { merchantOpen = false, runId = 0 }
 
+-- Per account: what to do at a merchant.
 local function settings()
   local db = HK.ModuleDB(NAME)
   if type(db.guildRepair) ~= "boolean" then db.guildRepair = false end
+  if type(db.sell) ~= "boolean" then db.sell = true end
+  if type(db.repair) ~= "boolean" then db.repair = true end
   return db
 end
+Vendor.Settings = settings
+
+-- Per character: the last visits and what greys earned / repairs cost so far.
+local function history()
+  local db = HK.CharDB(NAME)
+  if type(db.visits) ~= "table" then db.visits = {} end
+  if type(db.earned) ~= "number" then db.earned = 0 end
+  if type(db.repaired) ~= "number" then db.repaired = 0 end
+  for i = #db.visits, 1, -1 do
+    if type(db.visits[i]) ~= "table" then table.remove(db.visits, i) end
+  end
+  return db
+end
+Vendor.History = history
 
 -- Pure ---------------------------------------------------------------------------------
 
@@ -60,6 +81,34 @@ function Vendor.Summary(sold, value, repairCost, plan)
   return table.concat(parts, "; ") .. "."
 end
 
+local function capitalise(text)
+  return text:sub(1, 1):upper() .. text:sub(2)
+end
+
+-- One saved visit as a sentence ("Sold 7 grey items for 1g 2s; repaired for 45s.").
+function Vendor.VisitText(visit)
+  if type(visit) ~= "table" then return nil end
+  local text = Vendor.Summary(QoL.Num(visit.sold) or 0, QoL.Num(visit.value) or 0, QoL.Num(visit.cost),
+    type(visit.plan) == "string" and visit.plan or nil)
+  return text and capitalise(text) or nil
+end
+
+-- The headline amount of a visit: "+1g 2s" from greys, else the repair cost.
+function Vendor.VisitValue(visit)
+  local sold, value = QoL.Num(visit.sold) or 0, QoL.Num(visit.value) or 0
+  if sold > 0 then return "+" .. QoL.FormatMoney(value), "good" end
+  return QoL.FormatMoney(QoL.Num(visit.cost) or 0), "text"
+end
+
+-- Dashboard card for the last visit; nil when there was none.
+function Vendor.CardData(visit)
+  local text = Vendor.VisitText(visit)
+  if not text then return nil end
+  local value, color = Vendor.VisitValue(visit)
+  return { title = HK.L.VENDOR_CARD_TITLE, value = value, valueColor = color, sub = text,
+    alert = visit.plan == "poor", order = 40, icon = QoL.Icon("INV_Misc_Coin_02") }
+end
+
 -- Game ---------------------------------------------------------------------------------
 
 local function stillGrey(item)
@@ -95,6 +144,7 @@ end
 -- run (optional): the selling run that just ended ({ startMoney, value }).
 function Vendor.Repair(run)
   if not Vendor.state.merchantOpen then return nil end
+  if not settings().repair then return nil end
   if not QoL.Call(NAME, "CanMerchantRepair", _G.CanMerchantRepair) then return nil end
   local cost, canRepair = QoL.Call(NAME, "GetRepairAllCost", _G.GetRepairAllCost)
   cost = QoL.Num(cost)
@@ -121,11 +171,27 @@ local function active(run)
   return state.run == run and state.merchantOpen and HK:IsModuleEnabled(NAME) and not QoL.InCombat()
 end
 
+-- Keeps a visit that did something (sold or repaired) for the card and the page.
+function Vendor.Record(sold, value, cost, plan)
+  local db = history()
+  local visit = { at = QoL.ServerTime(NAME), sold = QoL.Num(sold) or 0, value = QoL.Num(value) or 0,
+    cost = QoL.Num(cost), plan = plan }
+  table.insert(db.visits, 1, visit)
+  for i = #db.visits, MAX_VISITS + 1, -1 do db.visits[i] = nil end
+  db.earned = db.earned + visit.value
+  if (plan == "self" or plan == "guild") and visit.cost then db.repaired = db.repaired + visit.cost end
+  QoL.Changed(NAME)
+  return visit
+end
+
 local function finish(run)
   Vendor.state.run = nil
   local cost, plan = Vendor.Repair(run)
   local line = Vendor.Summary(run.sold, run.value, cost, plan)
-  if line then QoL.Say(line) end
+  if line then
+    QoL.Say(line)
+    Vendor.Record(run.sold, run.value, cost, plan)
+  end
 end
 
 -- A run stopped by combat stays in Vendor.state.run (not waiting on a timer) and is
@@ -164,7 +230,8 @@ function Vendor.Start()
   state.pending = false
   state.runId = state.runId + 1
   local run = {
-    id = state.runId, queue = Vendor.Sellable(QoL.Greys(NAME)), index = 1, sold = 0, value = 0,
+    id = state.runId, queue = settings().sell and Vendor.Sellable(QoL.Greys(NAME)) or {},
+    index = 1, sold = 0, value = 0,
     startMoney = QoL.Num(QoL.Call(NAME, "GetMoney", _G.GetMoney)),
   }
   state.run = run
@@ -190,6 +257,103 @@ function Vendor.Stop()
   Vendor.state.run = nil
 end
 
+function Vendor.Card()
+  return Vendor.CardData(history().visits[1])
+end
+
+function Vendor.Open()
+  return QoL.OpenPage(NAME)
+end
+
+-- Page ----------------------------------------------------------------------------------
+
+Vendor.Page = {}
+
+local function setter(key)
+  return function(want)
+    settings()[key] = want and true or false
+    QoL.Changed(NAME)
+  end
+end
+
+local function getter(key)
+  return function() return settings()[key] end
+end
+
+function Vendor.Page.build(holder, w)
+  holder.tiles = Page.Tiles(holder, 0, 0, w, 3, 84)
+
+  local colW = math.floor(w * 0.5)
+  local auto = Page.Heading(holder, holder, "VENDOR_PAGE_AUTO", colW)
+  auto:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -98)
+  local rows = {
+    { "VENDOR_SELL", "VENDOR_SELL_HELP", "sell" },
+    { "VENDOR_REPAIR", "VENDOR_REPAIR_HELP", "repair" },
+    { "VENDOR_GUILD", "VENDOR_GUILD_HELP", "guildRepair" },
+  }
+  for i, spec in ipairs(rows) do
+    local row = Page.Setting(holder, holder, colW, spec[1], spec[2], getter(spec[3]), setter(spec[3]))
+    row:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -122 - (i - 1) * 48)
+  end
+  local note = Page.Help(holder, holder, "VENDOR_PAGE_NOTE", colW)
+  note:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -270)
+
+  local x = colW + 18
+  local rw = w - x
+  local visits = Page.Heading(holder, holder, "VENDOR_PAGE_VISITS", rw)
+  visits:SetPoint("TOPLEFT", holder, "TOPLEFT", x, -98)
+  holder.list = Page.List(holder, holder, rw, MAX_VISITS, 38, function(row)
+    row.value = Page.RowText(row, "normal", "good")
+    row.value:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -5)
+    row.ago = Page.RowText(row, "small", "faint", "RIGHT")
+    row.ago:SetPoint("TOPRIGHT", row, "TOPRIGHT", -8, -6)
+    row.text = Page.RowText(row, "small", "muted")
+    row.text:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -21)
+    row.text:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+  end, function(row, visit)
+    local value, color = Vendor.VisitValue(visit)
+    row.value:SetText(value)
+    UI.SetTextColorKey(row.value, visit.plan == "poor" and "warn" or color)
+    local at = QoL.Num(visit.at)
+    row.ago:SetText(at and QoL.Ago(QoL.ServerTime(NAME) - at) or "")
+    row.text:SetText(Vendor.VisitText(visit) or "")
+  end, "VENDOR_PAGE_NO_VISITS")
+  holder.list:SetPoint("TOPLEFT", holder, "TOPLEFT", x, -122)
+end
+
+function Vendor.Page.refresh(holder)
+  Page.Paint(holder)
+  local L = HK.L
+  local db = history()
+  local last = db.visits[1]
+  local tiles = holder.tiles
+  if Vendor.VisitText(last) then
+    local value, color = Vendor.VisitValue(last)
+    local at = QoL.Num(last.at)
+    tiles[1]:Set({ icon = QoL.Icon("INV_Misc_Coin_02"), title = L.VENDOR_TILE_LAST, value = value,
+      valueColor = color, alert = last.plan == "poor",
+      sub = at and QoL.Ago(QoL.ServerTime(NAME) - at) or "" })
+  else
+    tiles[1]:Set({ icon = QoL.Icon("INV_Misc_Coin_02"), title = L.VENDOR_TILE_LAST,
+      value = L.QOL_UNKNOWN, sub = L.VENDOR_TILE_NONE })
+  end
+  local sellable = Vendor.Sellable(QoL.Greys(NAME))
+  local worth = 0
+  for _, item in ipairs(sellable) do worth = worth + (QoL.Num(item.value) or 0) end
+  local selling = settings().sell
+  tiles[2]:Set({ icon = "bags", title = L.VENDOR_TILE_GREYS,
+    value = #sellable > 0 and (#sellable .. "  ·  " .. QoL.MoneyText(worth)) or "0",
+    sub = selling and L.VENDOR_TILE_GREYS_SUB or L.VENDOR_TILE_GREYS_OFF })
+  tiles[3]:Set({ icon = QoL.Icon("INV_Hammer_20"), title = L.VENDOR_TILE_EARNED,
+    value = QoL.MoneyText(db.earned), sub = L.VENDOR_TILE_EARNED_SUB:format(QoL.FormatMoney(db.repaired)) })
+  local items = {}
+  for i, visit in ipairs(db.visits) do
+    if Vendor.VisitText(visit) then items[#items + 1] = visit end
+    if i >= MAX_VISITS then break end
+  end
+  Page.SetItems(holder.list, items)
+end
+
 function Vendor.OnEnable()
   QoL.Events(NAME, Vendor.state, {
     MERCHANT_SHOW = function() Vendor.Start() end,
@@ -209,8 +373,9 @@ HK:RegisterCommand("vendor", QoL.Command(NAME, function(args)
     local db = settings()
     db.guildRepair = not db.guildRepair
     QoL.Say(db.guildRepair and HK.L.VENDOR_GUILD_ON or HK.L.VENDOR_GUILD_OFF)
-  else
+    QoL.Changed(NAME)
+  elseif not Vendor.Open() then
     QoL.Say(HK.L.VENDOR_USAGE)
     QoL.Say(settings().guildRepair and HK.L.VENDOR_GUILD_ON or HK.L.VENDOR_GUILD_OFF)
   end
-end), "vendor guild - repairs with guild funds on or off")
+end), "vendor [guild] - vendor page; guild switches guild-funded repairs")
