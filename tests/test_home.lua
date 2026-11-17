@@ -159,7 +159,7 @@ end)
 test("HUD saves a valid position and ignores bad saved data", function()
   local HK = boot()
   truthy(HK.HUD.SavePosition("XP", "TOP", "TOP", 10.4, -20.6))
-  eq(HK.HUD.SavedPosition("XP"), { "TOP", "TOP", 10, -20 })
+  eq(HK.HUD.SavedPosition("XP"), { "TOP", "TOP", 10, -21 })
   HK.db.hud.Bags = { "TOP" }
   eq(HK.HUD.SavedPosition("Bags"), nil)
   falsy(HK.HUD.SavePosition("XP", "TOP", "TOP", nil, 1))

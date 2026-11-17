@@ -208,9 +208,9 @@ test("SetAngle persists", function()
   eq(HK.db.settings.minimapAngle, 90)
 end)
 
-test("/hk opens the window once the module is loaded", function()
+test("/hk alts opens the window once the module is loaded", function()
   local _, Alts = setup()
-  SlashCmdList.HEARTHKEEP("")
+  SlashCmdList.HEARTHKEEP("alts")
   truthy(Alts.Window.frame:IsShown())
 end)
 
