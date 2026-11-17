@@ -1081,3 +1081,108 @@ test("the Waypoint page in the Home window follows the arrow live", function()
   eq(holder.target.distance.text, "50 yd")
   noErrors(HK, "Waypoint")
 end)
+
+-- Quest points --------------------------------------------------------------------------
+
+local function questLog(entries, extra)
+  C_QuestLog = {
+    GetNumQuestLogEntries = function() return #entries end,
+    GetInfo = function(i) return entries[i] end,
+  }
+  for k, v in pairs(extra or {}) do C_QuestLog[k] = v end
+end
+
+test("an accepted quest saves the objective point the game gives, and Go points the arrow at it", function()
+  worldMap()
+  questLog({ { title = "Kobold Camp", questID = 60, level = 5 } }, {
+    GetNextWaypoint = function(id) if id == 60 then return 1429, 0.4, 0.6 end end,
+  })
+  local HK = boot()
+  HK:EnableModule("Waypoint")
+  local W = HK:ModuleInfo("Waypoint")
+  Stub.fire("QUEST_ACCEPTED", 1, 60)
+  Stub.flushTimers()
+  local saved = HK.CharDB("Waypoint").quests[60]
+  eq({ saved.map, saved.x, saved.y, saved.source }, { 1429, 0.4, 0.6, "next" })
+  local list = W.Quests()
+  eq(list[1].title, "Kobold Camp")
+  truthy(W.GoQuest(list[1]))
+  eq({ W.current.map, W.current.x, W.current.y, W.current.note }, { 1429, 0.4, 0.6, "Kobold Camp" })
+  noErrors(HK, "Waypoint")
+end)
+
+test("without an objective from the game the point is where the quest was accepted", function()
+  local player = worldMap()
+  player.x, player.y = 0.25, 0.75
+  questLog({ { title = "Wolves", questID = 61 } })
+  local HK = boot()
+  HK:EnableModule("Waypoint")
+  local W = HK:ModuleInfo("Waypoint")
+  Stub.fire("QUEST_ACCEPTED", 1, 61)
+  Stub.flushTimers()
+  local q = W.Quests()[1]
+  eq(q.source, "accepted")
+  eq({ q.pos.x, q.pos.y }, { 0.25, 0.75 })
+  player.x, player.y = 0.9, 0.9
+  W.RecordQuest(61, "Wolves")
+  eq(W.Quests()[1].pos.x, 0.25)
+end)
+
+test("quests with a point come first; a quest with none cannot be pressed", function()
+  worldMap()
+  questLog({ { title = "B no point", questID = 2 }, { title = "Z with point", questID = 3 },
+    { title = "Header", questID = 9, isHeader = true } }, {
+    GetQuestsOnMap = function() return { { questID = 3, x = 0.1, y = 0.2 } } end,
+  })
+  local HK = boot()
+  local W = HK:ModuleInfo("Waypoint")
+  local list = W.Quests()
+  eq(#list, 2)
+  eq(list[1].title, "Z with point")
+  eq(list[1].source, "map")
+  eq(list[2].pos, nil)
+  falsy(W.GoQuest(list[2]))
+end)
+
+test("a removed or handed-in quest forgets its point", function()
+  worldMap()
+  questLog({ { title = "Kobold Camp", questID = 60 } }, {
+    GetNextWaypoint = function() return 1429, 0.4, 0.6 end,
+  })
+  local HK = boot()
+  HK:EnableModule("Waypoint")
+  Stub.fire("QUEST_ACCEPTED", 1, 60)
+  Stub.flushTimers()
+  truthy(HK.CharDB("Waypoint").quests[60])
+  Stub.fire("QUEST_TURNED_IN", 60)
+  eq(HK.CharDB("Waypoint").quests[60], nil)
+end)
+
+test("/hk debug says where quest points come from", function()
+  worldMap()
+  questLog({ { title = "A", questID = 1 }, { title = "B", questID = 2 } }, {
+    GetNextWaypoint = function(id) if id == 1 then return 1429, 0.5, 0.5 end end,
+  })
+  local HK = boot()
+  HK:EnableModule("Waypoint")
+  local joined = table.concat(HK.Diag.Report(), "\n")
+  truthy(joined:find("Quests: 2 in log, 1 with a point (objective: next 1", 1, true))
+end)
+
+test("the route page lists quests and switches to recent waypoints", function()
+  worldMap()
+  questLog({ { title = "Kobold Camp", questID = 60, level = 5, isComplete = true } }, {
+    GetNextWaypoint = function() return 1429, 0.4, 0.6 end,
+  })
+  local HK = boot()
+  HK:EnableModule("Waypoint")
+  truthy(HK.Home.Open("Waypoint"))
+  local W = HK:ModuleInfo("Waypoint")
+  local holder = W.holder
+  truthy(holder and rawget(holder, "showRecent"))
+  holder.showRecent.scripts.OnClick(holder.showRecent)
+  eq(holder.mode, "recent")
+  holder.showQuests.scripts.OnClick(holder.showQuests)
+  eq(holder.mode, "quests")
+  noErrors(HK, "Waypoint")
+end)

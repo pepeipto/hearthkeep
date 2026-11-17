@@ -20,6 +20,13 @@ function Diag.Last(module)
   return errors[module] or {}
 end
 
+local reporters = {}
+
+-- Modules can add one line each to /hk debug (for example what the client gives them).
+function Diag.AddReporter(fn)
+  if type(fn) == "function" then reporters[#reporters + 1] = fn end
+end
+
 function Diag.Report()
   local lines = {}
   local interface = GetBuildInfo and select(4, GetBuildInfo())
@@ -40,6 +47,10 @@ function Diag.Report()
         lines[#lines + 1] = string.format("Memory %s: %d KB", addon, math.floor(kb + 0.5))
       end
     end
+  end
+  for _, fn in ipairs(reporters) do
+    local ok, line = pcall(fn)
+    if ok and type(line) == "string" then lines[#lines + 1] = line end
   end
   local names = {}
   for module in pairs(errors) do names[#names + 1] = module end

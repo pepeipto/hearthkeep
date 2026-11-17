@@ -466,6 +466,171 @@ function Waypoint.Reuse(entry)
   return true
 end
 
+-- Quests ----------------------------------------------------------------------------
+-- Every quest you accept gets a saved point: the objective's map position when the
+-- client gives one (C_QuestLog.GetNextWaypoint, the quests listed on your map, or the
+-- legacy QuestPOIGetIconInfo), otherwise the spot where you accepted it. The page lists
+-- your quests; pressing one points the arrow at its point. Nothing is invented.
+
+local function questDB()
+  local db = HK.CharDB(NAME)
+  if type(db.quests) ~= "table" then db.quests = {} end
+  return db.quests
+end
+
+local function questLog()
+  local api = _G.C_QuestLog
+  if type(api) ~= "table" then return {} end
+  local count = call("GetNumQuestLogEntries", api.GetNumQuestLogEntries)
+  local n = count and num(count[2]) or 0
+  local list = {}
+  for i = 1, math.min(n or 0, 60) do
+    local r = call("GetInfo", api.GetInfo, i)
+    local info = r and r[2]
+    if type(info) == "table" and not info.isHeader and type(info.questID) == "number"
+      and type(info.title) == "string" and not secret(info.questID) then
+      local done = info.isComplete
+      if done == nil and type(api.IsComplete) == "function" then
+        local c = call("IsComplete", api.IsComplete, info.questID)
+        done = c and c[2]
+      end
+      list[#list + 1] = { id = info.questID, title = info.title, level = num(info.level),
+        done = done == true or done == 1 }
+    end
+  end
+  return list
+end
+
+local function inRange(x, y) return x and y and x >= 0 and x <= 1 and y >= 0 and y <= 1 end
+
+local function onMap(mapID)
+  local api = _G.C_QuestLog
+  local found = {}
+  if not (mapID and type(api) == "table") then return found end
+  local r = call("GetQuestsOnMap", api.GetQuestsOnMap, mapID)
+  local list = r and r[2]
+  if type(list) ~= "table" then return found end
+  for _, q in ipairs(list) do
+    if type(q) == "table" and type(q.questID) == "number" then
+      local x, y = num(q.x), num(q.y)
+      if inRange(x, y) then found[q.questID] = { map = mapID, x = x, y = y } end
+    end
+  end
+  return found
+end
+
+local function nextWaypoint(questID)
+  local api = _G.C_QuestLog
+  if type(api) ~= "table" then return nil end
+  local r = call("GetNextWaypoint", api.GetNextWaypoint, questID)
+  if not r then return nil end
+  local map, x, y = num(r[2]), num(r[3]), num(r[4])
+  if map and inRange(x, y) then return { map = map, x = x, y = y } end
+  return nil
+end
+
+local function legacyPOI(questID, mapID)
+  if type(_G.QuestPOIGetIconInfo) ~= "function" or not mapID then return nil end
+  local r = call("QuestPOIGetIconInfo", _G.QuestPOIGetIconInfo, questID)
+  if not r then return nil end
+  local x, y = num(r[3]), num(r[4])
+  if inRange(x, y) and x > 0 and y > 0 then return { map = mapID, x = x, y = y } end
+  return nil
+end
+
+-- The objective position the client gives right now, and its source, or nil.
+function Waypoint.LivePosition(questID, here, mapID)
+  local pos = nextWaypoint(questID)
+  if pos then return pos, "next" end
+  pos = here and here[questID]
+  if pos then return pos, "map" end
+  pos = legacyPOI(questID, mapID)
+  if pos then return pos, "poi" end
+  return nil
+end
+
+-- Saves the quest's point: the objective when known, else where the player stands.
+function Waypoint.RecordQuest(questID, title)
+  if type(questID) ~= "number" then return nil end
+  local db = questDB()
+  local mapID = Waypoint.CurrentMap()
+  local pos, source = Waypoint.LivePosition(questID, onMap(mapID), mapID)
+  if not pos and not db[questID] and mapID then
+    local r = call("GetPlayerMapPosition", cmap("GetPlayerMapPosition"), mapID, "player")
+    local px, py = xy(r and r[2])
+    if inRange(px, py) then pos, source = { map = mapID, x = px, y = py }, "accepted" end
+  end
+  if pos then
+    db[questID] = { map = pos.map, x = pos.x, y = pos.y, source = source,
+      title = type(title) == "string" and title or (db[questID] and db[questID].title) }
+    changed()
+  end
+  return db[questID]
+end
+
+function Waypoint.ForgetQuest(questID)
+  if type(questID) == "number" then questDB()[questID] = nil end
+  changed()
+end
+
+-- Your quest log with each quest's point: live objective first, then the saved one.
+-- { { id, title, level, done, pos = {map,x,y} or nil, source } }, with a point first.
+function Waypoint.Quests()
+  local mapID = Waypoint.CurrentMap()
+  local here = onMap(mapID)
+  local saved = questDB()
+  local list = questLog()
+  local inLog = {}
+  for _, q in ipairs(list) do
+    inLog[q.id] = true
+    local pos, source = Waypoint.LivePosition(q.id, here, mapID)
+    if pos then
+      saved[q.id] = { map = pos.map, x = pos.x, y = pos.y, source = source, title = q.title }
+    elseif Waypoint.Valid(saved[q.id]) then
+      pos, source = saved[q.id], saved[q.id].source
+    end
+    q.pos, q.source = pos, pos and source or nil
+  end
+  for id in pairs(saved) do
+    if not inLog[id] and #list > 0 then saved[id] = nil end
+  end
+  table.sort(list, function(a, b)
+    if (a.pos ~= nil) ~= (b.pos ~= nil) then return a.pos ~= nil end
+    return a.title < b.title
+  end)
+  return list
+end
+
+function Waypoint.GoQuest(q)
+  if type(q) ~= "table" or not Waypoint.Valid(q.pos) then return false end
+  local wp = { map = q.pos.map, x = q.pos.x, y = q.pos.y, note = q.title }
+  Waypoint.Remember(wp)
+  announce(wp, begin(wp))
+  return true
+end
+
+-- One line for /hk debug: where quest points come from on this client.
+function Waypoint.QuestReport()
+  local list = Waypoint.Quests()
+  local counts = { next = 0, map = 0, poi = 0, accepted = 0 }
+  local with = 0
+  for _, q in ipairs(list) do
+    if q.pos then
+      with = with + 1
+      if counts[q.source] then counts[q.source] = counts[q.source] + 1 end
+    end
+  end
+  return string.format("Quests: %d in log, %d with a point (objective: next %d, map %d, poi %d; accepted here %d)",
+    #list, with, counts.next, counts.map, counts.poi, counts.accepted)
+end
+
+if HK.Diag and HK.Diag.AddReporter then
+  HK.Diag.AddReporter(function()
+    if not HK:IsModuleEnabled(NAME) then return nil end
+    return Waypoint.QuestReport()
+  end)
+end
+
 function Waypoint.Open()
   HK.Adventure.EnsureOn(NAME)
   return HK.Home.Open(NAME)
@@ -547,6 +712,8 @@ local function label(parent, text, anchor, gap)
   return fs
 end
 
+local refreshPage
+
 local function buildPage(holder, w, h)
   local UI = HK.UI
   Waypoint.holder = holder
@@ -606,8 +773,19 @@ local function buildPage(holder, w, h)
   holder.error = UI.Text(holder, "small", "bad")
   holder.error:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -4)
 
+  holder.mode = "quests"
   holder.recentTitle = UI.Text(holder, "small", "gold")
   holder.recentTitle:SetPoint("TOPLEFT", row, "BOTTOMLEFT", 0, -22)
+  holder.showQuests = UI.Button(holder, "", 96, 18, function()
+    holder.mode = "quests"
+    refreshPage(holder)
+  end)
+  holder.showQuests:SetPoint("TOPRIGHT", holder, "TOPRIGHT", -102, -(108 + 10 + 22 + 18))
+  holder.showRecent = UI.Button(holder, "", 96, 18, function()
+    holder.mode = "recent"
+    refreshPage(holder)
+  end)
+  holder.showRecent:SetPoint("LEFT", holder.showQuests, "RIGHT", 6, 0)
   local top = 108 + 10 + 22 + 40
   holder.recent = UI.List(holder, w, h - top - 14, 24, function(r, i)
     r.stripe = HK.Adventure.Stripe(i)
@@ -625,15 +803,34 @@ local function buildPage(holder, w, h)
     r.note:SetWidth(w - 340)
     if r.note.SetWordWrap then r.note:SetWordWrap(false) end
     r.go = UI.Button(r, "", 56, 18, function(self)
-      if self.entry then Waypoint.Reuse(self.entry) end
+      if self.quest then Waypoint.GoQuest(self.quest)
+      elseif self.entry then Waypoint.Reuse(self.entry) end
     end)
+    r:SetScript("OnClick", function() if r.go.quest then Waypoint.GoQuest(r.go.quest) end end)
     r.go:SetPoint("RIGHT", r, "RIGHT", -6, 0)
   end, function(r, entry)
     UI.SetPanelColors(r, r.stripe)
-    r.coords:SetText(Waypoint.Coords(entry))
-    r.map:SetText(Waypoint.MapName(entry.map) or "")
-    r.note:SetText(entry.note or "")
-    r.go.entry = entry
+    if entry.quest then
+      local q = entry.quest
+      r.coords:SetText(q.pos and Waypoint.Coords(q.pos) or "--")
+      r.map:SetText((q.level and ("[" .. q.level .. "] ") or "") .. q.title)
+      local where
+      if q.done then where = HK.L.WAY_QUEST_DONE
+      elseif not q.pos then where = HK.L.WAY_QUEST_NOPOS
+      elseif q.source == "accepted" then where = HK.L.WAY_QUEST_ACCEPTED
+      else where = HK.L.WAY_QUEST_OBJECTIVE end
+      r.note:SetText(where)
+      UI.SetTextColorKey(r.note, q.done and "good" or (q.pos and "muted" or "faint"))
+      r.go.quest, r.go.entry = q, nil
+      r.go:SetShown(q.pos ~= nil)
+    else
+      r.coords:SetText(Waypoint.Coords(entry))
+      r.map:SetText(Waypoint.MapName(entry.map) or "")
+      r.note:SetText(entry.note or "")
+      UI.SetTextColorKey(r.note, "text")
+      r.go.quest, r.go.entry = nil, entry
+      r.go:Show()
+    end
     r.go:SetLabel(HK.L.WAY_GO)
   end)
   holder.recent:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -top)
@@ -682,16 +879,29 @@ paintLive = function()
   if not ok then HK.Diag.Record(NAME, "Page.live", err) end
 end
 
-local function refreshPage(holder)
+refreshPage = function(holder)
   local L = HK.L
   paintTarget(holder)
   holder.lblNote:SetText(L.WAY_NOTE)
   holder.set:SetLabel(L.WAY_SET_BUTTON)
   holder.here:SetLabel(L.WAY_HERE)
-  holder.recentTitle:SetText(L.WAY_RECENT)
-  local recent = Waypoint.Recent()
-  holder.recent:SetItems(recent)
-  holder.recentEmpty:SetText(#recent == 0 and L.WAY_RECENT_EMPTY or "")
+  holder.showQuests:SetLabel(L.WAY_QUESTS)
+  holder.showRecent:SetLabel(L.WAY_RECENT_SHORT)
+  local quests = holder.mode ~= "recent"
+  HK.UI.SetPanelColors(holder.showQuests, quests and "select" or "card", quests and "gold" or "border")
+  HK.UI.SetPanelColors(holder.showRecent, quests and "card" or "select", quests and "border" or "gold")
+  if quests then
+    local items = {}
+    for _, q in ipairs(Waypoint.Quests()) do items[#items + 1] = { quest = q } end
+    holder.recentTitle:SetText(L.WAY_QUESTS_TITLE)
+    holder.recent:SetItems(items)
+    holder.recentEmpty:SetText(#items == 0 and L.WAY_QUESTS_EMPTY or "")
+  else
+    holder.recentTitle:SetText(L.WAY_RECENT)
+    local recent = Waypoint.Recent()
+    holder.recent:SetItems(recent)
+    holder.recentEmpty:SetText(#recent == 0 and L.WAY_RECENT_EMPTY or "")
+  end
 end
 
 Waypoint.Page = HK.Adventure.Page(buildPage, refreshPage)
@@ -712,6 +922,23 @@ function Waypoint.OnEnable()
     registered = true
     HK:RegisterEvent("PLAYER_REGEN_ENABLED", function()
       if Waypoint.current and not Waypoint.frame and ensureFrame() then Waypoint.Update() end
+    end, NAME)
+    -- A new quest: save its point a moment later (the client fills the log after the event).
+    HK:RegisterEvent("QUEST_ACCEPTED", function(_, a, b)
+      local questID = type(b) == "number" and b or a
+      C_Timer.After(0.5, function()
+        if not HK:IsModuleEnabled(NAME) then return end
+        local title
+        for _, q in ipairs(questLog()) do if q.id == questID then title = q.title end end
+        Waypoint.RecordQuest(questID, title)
+      end)
+    end, NAME)
+    HK:RegisterEvent("QUEST_REMOVED", function(_, questID) Waypoint.ForgetQuest(questID) end, NAME)
+    HK:RegisterEvent("QUEST_TURNED_IN", function(_, questID) Waypoint.ForgetQuest(questID) end, NAME)
+    HK:RegisterEvent("QUEST_LOG_UPDATE", function()
+      HK:Debounce("HKWaypointQuests", 1, function()
+        if HK:IsModuleEnabled(NAME) then changed() end
+      end)
     end, NAME)
   end
   local saved = HK.CharDB(NAME).current
