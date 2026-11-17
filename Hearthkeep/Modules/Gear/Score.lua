@@ -120,13 +120,38 @@ local function trim(s)
   return (s:gsub("^%s+", ""):gsub("%s+$", ""))
 end
 
--- Free text typed by the player: no escape sequences, at most `max` characters.
+-- UTF-8: a continuation byte (10xxxxxx) never starts a character.
+local function continuation(byte)
+  return byte ~= nil and byte >= 128 and byte < 192
+end
+
+-- Number of characters (not bytes) in a UTF-8 string.
+function Score.Utf8Len(s)
+  local n = 0
+  for i = 1, #s do
+    if not continuation(s:byte(i)) then n = n + 1 end
+  end
+  return n
+end
+
+-- At most `max` bytes of s, never cutting a character in two.
+function Score.Utf8Cut(s, max)
+  if #s <= max then return s end
+  local cut = max
+  while cut > 0 and continuation(s:byte(cut + 1)) do cut = cut - 1 end
+  return s:sub(1, cut)
+end
+
+-- Free text typed by the player: no escape sequences, at most `max` bytes (60 by
+-- default), cut on a character boundary.
 function Score.CleanNote(value, max)
   local s = text(value)
   if not s then return nil end
   s = trim(s:gsub("|", ""))
   if s == "" then return nil end
-  return s:sub(1, max or 60)
+  s = trim(Score.Utf8Cut(s, max or 60))
+  if s == "" then return nil end
+  return s
 end
 
 -- "/hk want ..." arguments:
@@ -172,37 +197,84 @@ function Score.CleanSetName(value)
   local s = text(value)
   if not s then return nil end
   s = trim(s)
-  if s == "" or #s > 32 or s:find("|", 1, true) then return nil end
+  if s == "" or Score.Utf8Len(s) > 32 or #s > 128 or s:find("|", 1, true) then return nil end
   return s
 end
 
--- What to equip for a set. set[slot] and equipped[slot] are item links; bags is a list
--- of { bag = , slot = , link = }. Returns actions { { slot = , link = , bag = , bagSlot = } }
--- and the list of slots whose item is neither worn nor in the bags.
+-- What to do to wear a set. set[slot] is an item link, or false for "this slot should
+-- be empty" (used when the gear worn before an auto-swap comes back); equipped[slot] is
+-- the link worn now; bags is a list of { bag = , slot = , link = }.
+-- Returns the actions, in order, and the list of slots whose item is neither worn nor in
+-- the bags. Actions:
+--   { slot = , link = , fromSlot = }          move an item worn in another slot (swap)
+--   { slot = , link = , bag = , bagSlot = }   equip an item from the bags
+--   { slot = , unequip = true }               take the item off into the bags
+-- Items worn elsewhere (a ring or trinket in the other slot, a one-hander in the other
+-- hand) are moved rather than counted as missing. Moves come first, then bag items,
+-- then unequips, so items taken off find the most free bag space.
 function Score.PlanEquip(set, equipped, bags)
   local actions, missing, used = {}, {}, {}
-  equipped = type(equipped) == "table" and equipped or {}
+  set = type(set) == "table" and set or {}
   bags = type(bags) == "table" and bags or {}
+  local cur = {}
+  if type(equipped) == "table" then
+    for slot = 1, 19 do cur[slot] = text(equipped[slot]) end
+  end
+  local function wantId(slot)
+    local want = text(set[slot])
+    return want and Score.ItemId(want) or nil
+  end
+  local function settled(slot)
+    local id = wantId(slot)
+    return id ~= nil and Score.ItemId(cur[slot]) == id
+  end
+  -- 1. Items already worn in another slot.
+  for _ = 1, 3 do
+    local moved = false
+    for slot = 1, 19 do
+      local id = wantId(slot)
+      if id and not settled(slot) then
+        for from = 1, 19 do
+          if from ~= slot and Score.ItemId(cur[from]) == id and not settled(from) then
+            actions[#actions + 1] = { slot = slot, link = cur[from], fromSlot = from }
+            cur[slot], cur[from] = cur[from], cur[slot]
+            moved = true
+            break
+          end
+        end
+      end
+    end
+    if not moved then break end
+  end
+  -- 2. Items in the bags: the exact link first, then any copy of the same item.
   for slot = 1, 19 do
-    local want = type(set) == "table" and text(set[slot]) or nil
-    local wantId = want and Score.ItemId(want)
-    if wantId and Score.ItemId(equipped[slot]) ~= wantId then
+    local want = text(set[slot])
+    local id = wantId(slot)
+    if id and not settled(slot) then
       local found
       for i, entry in ipairs(bags) do
         if not used[i] and entry.link == want then found = i break end
       end
       if not found then
         for i, entry in ipairs(bags) do
-          if not used[i] and Score.ItemId(entry.link) == wantId then found = i break end
+          if not used[i] and Score.ItemId(entry.link) == id then found = i break end
         end
       end
       if found then
         used[found] = true
         local entry = bags[found]
         actions[#actions + 1] = { slot = slot, link = entry.link, bag = entry.bag, bagSlot = entry.slot }
+        cur[slot] = entry.link
       else
         missing[#missing + 1] = slot
       end
+    end
+  end
+  -- 3. Slots that should be empty.
+  for slot = 1, 19 do
+    if set[slot] == false and cur[slot] then
+      actions[#actions + 1] = { slot = slot, unequip = true }
+      cur[slot] = nil
     end
   end
   return actions, missing

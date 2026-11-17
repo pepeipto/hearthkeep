@@ -16,16 +16,20 @@ local ITEMS = {
   [112] = { name = "Tabard", quality = 1, level = 1, equipLoc = "INVTYPE_TABARD" },
   [200] = { name = "Carrot on a Stick", quality = 2, level = 30, equipLoc = "INVTYPE_TRINKET" },
   [201] = { name = "Badge", quality = 3, level = 60, equipLoc = "INVTYPE_TRINKET" },
+  [202] = { name = "Rune", quality = 3, level = 55, equipLoc = "INVTYPE_TRINKET" },
   [300] = { name = "Band of Wishes", quality = 4, level = 70, equipLoc = "INVTYPE_FINGER" },
+  [301] = { name = "Band of Stars", quality = 3, level = 60, equipLoc = "INVTYPE_FINGER" },
 }
 
 local function link(id)
   return "|cffa335ee|Hitem:" .. id .. "::::::::60:::::|h[" .. ITEMS[id].name .. "]|h|r"
 end
 
--- A fake character: equipped[slot] = item id, bags = list of item ids (bag 0).
+-- A fake character: equipped[slot] = item id, bags[position] = item id (bag 0, 16
+-- places, holes allowed). Items move through a cursor like in the game.
 local function world(equipped, bags)
-  local state = { equipped = equipped or {}, bags = bags or {}, equips = {} }
+  local state = { equipped = equipped or {}, bags = bags or {}, equips = {}, unequips = 0,
+    size = 16, unloaded = {} }
   GetInventoryItemLink = function(unit, slot)
     if unit ~= "player" then return nil end
     local id = state.equipped[slot]
@@ -34,24 +38,54 @@ local function world(equipped, bags)
   GetItemInfo = function(item)
     local id = tonumber(tostring(item):match("item:(%d+)") or item)
     local it = id and ITEMS[id]
-    if not it then return nil end
+    if not it or state.unloaded[id] then return nil end
     return it.name, link(id), it.quality, it.level, 60, "Armor", "Misc", 1, it.equipLoc
   end
+  local function free()
+    local n = 0
+    for i = 1, state.size do if not state.bags[i] then n = n + 1 end end
+    return n
+  end
   C_Container = {
-    GetContainerNumSlots = function(bag) return bag == 0 and 16 or 0 end,
+    GetContainerNumSlots = function(bag) return bag == 0 and state.size or 0 end,
     GetContainerItemLink = function(bag, slot)
       local id = bag == 0 and state.bags[slot]
       return id and link(id) or nil
     end,
+    GetContainerNumFreeSlots = function(bag)
+      if bag ~= 0 then return 0, 0 end
+      return free(), 0
+    end,
+    PickupContainerItem = function(bag, slot)
+      local id = bag == 0 and state.bags[slot]
+      if id and not state.cursor then state.cursor = { id = id, bagSlot = slot } end
+    end,
   }
-  EquipItemByName = function(itemLink, slot)
-    local id = tonumber(itemLink:match("item:(%d+)"))
-    state.equips[#state.equips + 1] = { id = id, slot = slot }
-    for i, b in ipairs(state.bags) do
-      if b == id then table.remove(state.bags, i) break end
+  PickupInventoryItem = function(slot)
+    local id = state.equipped[slot]
+    if id and not state.cursor then state.cursor = { id = id, invSlot = slot } end
+  end
+  CursorHasItem = function() return state.cursor ~= nil end
+  ClearCursor = function() state.cursor = nil end
+  EquipCursorItem = function(slot)
+    local c = state.cursor
+    if not c or state.refuse then return end
+    state.cursor = nil
+    state.equips[#state.equips + 1] = { id = c.id, slot = slot }
+    local old = state.equipped[slot]
+    if c.bagSlot then state.bags[c.bagSlot] = old else state.equipped[c.invSlot] = old end
+    state.equipped[slot] = c.id
+  end
+  PutItemInBackpack = function()
+    local c = state.cursor
+    if not (c and c.invSlot) then return end
+    for i = 1, state.size do
+      if not state.bags[i] then
+        state.bags[i], state.equipped[c.invSlot], state.cursor = c.id, nil, nil
+        state.unequips = state.unequips + 1
+        return
+      end
     end
-    if state.equipped[slot] then table.insert(state.bags, state.equipped[slot]) end
-    state.equipped[slot] = id
   end
   return state
 end
@@ -154,6 +188,21 @@ test("set names are trimmed, 1 to 32 characters, no pipes", function()
   eq(C("a|b"), nil)
 end)
 
+test("set names count characters, notes are cut on a character boundary", function()
+  local HK = boot()
+  local S = HK.GearScore
+  eq(S.Utf8Len("Botas de cuero endurecido ñandú"), 31)
+  eq(S.CleanSetName("Botas de cuero endurecido ñandú"), "Botas de cuero endurecido ñandú")
+  eq(S.CleanSetName(string.rep("ñ", 32)), string.rep("ñ", 32))
+  eq(S.CleanSetName(string.rep("é", 33)), nil)
+  eq(S.CleanSetName("Pingüino áéíóú"), "Pingüino áéíóú")
+  -- "Ñandú " is 8 bytes; 59 bytes leave room for 25 two-byte letters, not 25 and a half.
+  eq(S.CleanNote("Ñandú " .. string.rep("é", 40), 59), "Ñandú " .. string.rep("é", 25))
+  eq(S.CleanNote("Botas de cuero endurecido", 60), "Botas de cuero endurecido")
+  eq(S.Utf8Cut("ü", 1), "")
+  eq(S.CleanNote("ü", 1), nil)
+end)
+
 test("PlanEquip skips worn items, takes bag items and lists the missing", function()
   local HK = boot()
   local actions, missing = HK.GearScore.PlanEquip(
@@ -164,6 +213,22 @@ test("PlanEquip skips worn items, takes bag items and lists the missing", functi
   eq(actions[1].slot, 1)
   eq(actions[1].bagSlot, 3)
   eq(missing, { 2 })
+end)
+
+test("PlanEquip moves items worn in the other slot instead of calling them missing", function()
+  local HK = boot()
+  local actions, missing = HK.GearScore.PlanEquip(
+    { [11] = link(300), [12] = link(301) }, { [11] = link(301), [12] = link(300) }, {})
+  eq(missing, {})
+  eq(#actions, 1)
+  eq(actions[1].slot, 11)
+  eq(actions[1].fromSlot, 12)
+  -- A slot that should be empty is emptied after everything else.
+  actions = HK.GearScore.PlanEquip({ [13] = false, [1] = link(100) }, { [13] = link(200) },
+    { { bag = 0, slot = 4, link = link(100) } })
+  eq(#actions, 2)
+  eq(actions[1].bagSlot, 4)
+  eq(actions[2], { slot = 13, unequip = true })
 end)
 
 test("auto-swap target: mounted wins, then resting, only for existing sets", function()
@@ -308,6 +373,10 @@ test("no window is created in combat", function()
   falsy(HK.Gear.Open())
   eq(HK.Gear.Window(), nil)
   truthy(printedContains("after combat"))
+  Stub.inCombat = false
+  Stub.fire("PLAYER_REGEN_ENABLED")
+  local frame = HK.Gear.Window()
+  truthy(frame and frame:IsShown())
 end)
 
 test("own tooltip gets the Hearthkeep score only while Gear is on", function()
@@ -365,6 +434,7 @@ test("a saved set is equipped from the bags; missing items are skipped", functio
   state.equipped[2] = nil
   state.bags = { 100 }
   SlashCmdList.HEARTHKEEP("sets equip tank")
+  Stub.flushTimers()
   eq(#state.equips, 1)
   eq(state.equips[1], { id = 100, slot = 1 })
   truthy(printedContains("set equipped: Tank"))
@@ -466,6 +536,125 @@ test("the sets window lists sets and closes when the module is turned off", func
   falsy(frame.rows[2].shown)
   HK:DisableModule("Sets")
   falsy(frame:IsShown())
+end)
+
+-- Auto-swap with the "mounted" set {13 = Carrot}; returns state and a mount switch.
+local function autoWorld(HK, equipped, bags)
+  local state = world(equipped, bags)
+  local mount = { on = false }
+  IsMounted = function() return mount.on end
+  IsResting = function() return false end
+  HK:EnableModule("Sets")
+  HK.CharDB("Sets").sets = { mounted = { [13] = link(200) } }
+  HK.Sets.SetAuto(true)
+  Stub.flushTimers()
+  return state, mount
+end
+
+local function ride(mount, on)
+  mount.on = on
+  Stub.fire("UNIT_AURA", "player")
+  Stub.flushTimers()
+end
+
+test("auto-swap leaves a slot alone when the player changed it meanwhile", function()
+  local HK = boot()
+  local state, mount = autoWorld(HK, { [13] = 201 }, { 200, 202 })
+  ride(mount, true)
+  eq(state.equipped[13], 200)
+  eq(HK.CharDB("Sets").autoActive, "mounted")
+  state.equipped[13], state.bags[2] = 202, 200
+  ride(mount, false)
+  eq(state.equipped[13], 202)
+  eq(#state.equips, 1)
+  eq(HK.CharDB("Sets").autoActive, nil)
+end)
+
+test("auto-swap takes off an item it put into an empty slot", function()
+  local HK = boot()
+  local state, mount = autoWorld(HK, {}, { 200 })
+  ride(mount, true)
+  eq(state.equipped[13], 200)
+  eq(HK.CharDB("Sets").autoBefore[13], false)
+  ride(mount, false)
+  eq(state.equipped[13], nil)
+  eq(state.unequips, 1)
+  eq(state.bags[1], 200)
+end)
+
+test("auto-swap keeps the item on and says so when the bags are full", function()
+  local HK = boot()
+  local state, mount = autoWorld(HK, {}, { 200 })
+  state.size = 1
+  ride(mount, true)
+  state.bags[1] = 102
+  ride(mount, false)
+  eq(state.equipped[13], 200)
+  eq(state.unequips, 0)
+  truthy(printedContains("bags are full"))
+  eq(state.cursor, nil)
+end)
+
+test("turning auto-swap off in combat puts the old gear back after combat", function()
+  local HK = boot()
+  local state, mount = autoWorld(HK, { [13] = 201 }, { 200 })
+  ride(mount, true)
+  eq(state.equipped[13], 200)
+  Stub.inCombat = true
+  HK.Sets.SetAuto(false)
+  Stub.flushTimers()
+  eq(state.equipped[13], 200)
+  truthy(HK.Sets.pending)
+  Stub.inCombat = false
+  Stub.fire("PLAYER_REGEN_ENABLED")
+  Stub.flushTimers()
+  eq(state.equipped[13], 201)
+  eq(HK.CharDB("Sets").autoActive, nil)
+end)
+
+test("turning the Sets module off puts the old gear back, or forgets the swap in combat", function()
+  local HK = boot()
+  local state, mount = autoWorld(HK, { [13] = 201 }, { 200 })
+  ride(mount, true)
+  HK:DisableModule("Sets")
+  Stub.flushTimers()
+  eq(state.equipped[13], 201)
+  eq(HK.CharDB("Sets").autoActive, nil)
+  HK:EnableModule("Sets")
+  Stub.flushTimers()
+  ride(mount, true)
+  eq(state.equipped[13], 200)
+  Stub.inCombat = true
+  HK:DisableModule("Sets")
+  eq(HK.CharDB("Sets").autoActive, nil)
+  eq(HK.CharDB("Sets").autoBefore, nil)
+  eq(state.equipped[13], 200)
+end)
+
+test("a refused equip is reported, clears the cursor and does not start an auto-swap", function()
+  local HK = boot()
+  local state, mount = autoWorld(HK, { [13] = 201 }, { 200 })
+  state.refuse = true
+  ride(mount, true)
+  eq(state.equipped[13], 201)
+  eq(state.cursor, nil)
+  eq(HK.CharDB("Sets").autoActive, nil)
+  SlashCmdList.HEARTHKEEP("sets equip mounted")
+  Stub.flushTimers()
+  truthy(printedContains("1 items were not in your bags"))
+end)
+
+test("rings worn in swapped slots are swapped back, not reported missing", function()
+  local HK = boot()
+  local state = world({ [11] = 301, [12] = 300 })
+  HK:EnableModule("Sets")
+  HK.CharDB("Sets").sets = { Rings = { [11] = link(300), [12] = link(301) } }
+  local result
+  truthy(HK.Sets.Equip("rings", function(_, done, skipped) result = { done, skipped } end))
+  Stub.flushTimers()
+  eq(state.equipped[11], 300)
+  eq(state.equipped[12], 301)
+  eq(result, { 1, 0 })
 end)
 
 -- Wishlist -------------------------------------------------------------------------------
@@ -587,7 +776,7 @@ test("group messages are accepted only from members, parsed strictly", function(
   HK:EnableModule("Group")
   local G = HK.Group
   truthy(G.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder"))
-  eq(G.Peer("Bob-Thunder"), { score = 812.5, version = "0.2.0" })
+  eq(G.Peer("Bob-Thunder"), { score = 812.5, version = "0.2.0", guid = "Player-1-0001" })
   truthy(G.Receive("HKGroup", "S 700 0.3.0", "PARTY", "Eve-SilverHand"))
   falsy(G.Receive("HKGroup", "S 900 0.2.0", "PARTY", "Mallory-Thunder"))
   falsy(G.Receive("HKGroup", "S 900 0.2.0", "WHISPER", "Bob-Thunder"))
@@ -688,4 +877,48 @@ test("a group member's shared score shows on their tooltip", function()
   HK.Group.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder")
   tip.hooks.OnTooltipSetUnit(tip)
   eq(tip.lines[1], "Hearthkeep score: 812.5")
+end)
+
+test("an instance-only group uses INSTANCE_CHAT", function()
+  local HK = boot()
+  party({ { "Bob", nil } })
+  HK:EnableModule("Group")
+  eq(HK.Group.Channel(), "PARTY")
+  LE_PARTY_CATEGORY_HOME, LE_PARTY_CATEGORY_INSTANCE = 1, 2
+  local home = false
+  IsInGroup = function(category) if category == 1 then return home end return true end
+  eq(HK.Group.Channel(), "INSTANCE_CHAT")
+  home = true
+  eq(HK.Group.Channel(), "PARTY")
+end)
+
+test("a partial score is not shared until the items have loaded", function()
+  local HK = boot()
+  local state = world({ [1] = 100, [2] = 102 })
+  state.unloaded[102] = true
+  local sent = party({ { "Bob", nil } })
+  local run = manualTimers()
+  HK:EnableModule("Group")
+  run()
+  eq(#sent, 0)
+  state.unloaded[102] = nil
+  Stub.fire("GET_ITEM_INFO_RECEIVED", 102)
+  run()
+  eq(#sent, 1)
+  eq(sent[1].text, "S 132.9 0.0.0")
+end)
+
+test("group messages need a player GUID and a shared score follows that GUID", function()
+  local HK = boot()
+  world({ [1] = 100 })
+  party({ { "Bob", nil } })
+  local bob = "Creature-0-1-2-3"
+  UnitGUID = function(unit) return unit == "party1" and bob or "Player-1-0001" end
+  HK:EnableModule("Group")
+  falsy(HK.Group.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder"))
+  bob = "Player-1-0042"
+  truthy(HK.Group.Receive("HKGroup", "S 812.5 0.2.0", "PARTY", "Bob-Thunder"))
+  eq(HK.Group.ScoreForUnit("party1"), 812.5)
+  bob = "Player-1-0099"
+  eq(HK.Group.ScoreForUnit("party1"), nil)
 end)
