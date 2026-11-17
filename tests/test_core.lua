@@ -11,7 +11,9 @@ test("module disabled in settings is not enabled", function()
   local HK = Stub.load("Hearthkeep")
   local count = 0
   HK:RegisterModule("Testmod", { OnEnable = function() count = count + 1 end })
-  HK.db = { settings = { modules = { Testmod = false } } }
+  HearthkeepDB = nil
+  HK.Storage.Load()
+  HK.db.settings.modules.Testmod = false
   Stub.fire("PLAYER_LOGIN")
   eq(count, 0)
   falsy(HK:IsModuleEnabled("Testmod"))
