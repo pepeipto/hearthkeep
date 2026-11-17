@@ -17,3 +17,9 @@ Version.lua
 Options.lua
 HUD.lua
 Home.lua
+Modules\Gear\Locale.lua
+Modules\Gear\Score.lua
+Modules\Gear\Gear.lua
+Modules\Gear\Sets.lua
+Modules\Gear\Wishlist.lua
+Modules\Gear\Group.lua
