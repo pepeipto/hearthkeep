@@ -1,0 +1,21 @@
+name: tests
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  lua:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LuaJIT
+        run: sudo apt-get update -q && sudo apt-get install -y -q luajit
+      - name: Run offline tests
+        run: luajit tests/run.lua
+      - name: Packs in sync
+        run: |
+          luajit scripts/gen-packs.lua
+          git diff --exit-code scripts/packs.json
