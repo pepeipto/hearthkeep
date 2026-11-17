@@ -38,3 +38,7 @@ Modules\Bosses\Commands.lua
 Modules\Modes\Engine.lua
 Modules\Modes\Window.lua
 Modules\Modes\Commands.lua
+Modules\Adventure\Locale.lua
+Modules\Adventure\Training.lua
+Modules\Adventure\Professions.lua
+Modules\Adventure\Waypoint.lua
