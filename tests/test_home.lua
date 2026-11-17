@@ -210,7 +210,7 @@ test("/hk hud shows every HUD frame of an enabled module and restores it on lock
   truthy(xp:IsShown())
   truthy(xp.hkHandle:IsShown())
   eq(xp.hkHandle:GetText(), "Experience")
-  eq(xp.hkWasShown, false)
+  eq(rawget(xp, "hkWasShown"), false)
   falsy(bags:IsShown())
   truthy(free:IsShown())
   -- The owner hides while unlocked: remembered, the frame stays visible to be dragged.
@@ -221,7 +221,7 @@ test("/hk hud shows every HUD frame of an enabled module and restores it on lock
   SlashCmdList.HEARTHKEEP("hud")
   falsy(xp:IsShown())
   falsy(xp.hkHandle:IsShown())
-  eq(xp.hkWasShown, nil)
+  eq(rawget(xp, "hkWasShown"), nil)
   falsy(free:IsShown())
   falsy(bags:IsShown())
   eq(told, { true, false })

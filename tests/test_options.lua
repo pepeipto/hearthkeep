@@ -56,6 +56,8 @@ end)
 test("/hk modules lists registered modules", function()
   local HK = Stub.load("Hearthkeep")
   HK:RegisterModule("Alts", {})
+  Stub.fire("ADDON_LOADED", "Hearthkeep")
+  Stub.fire("PLAYER_LOGIN")
   SlashCmdList.HEARTHKEEP("modules")
   truthy(printedText():find("Alts: on", 1, true))
 end)
@@ -119,6 +121,8 @@ end)
 test("panel checkboxes are labeled and refresh on every show", function()
   local HK = Stub.load("Hearthkeep")
   HK:RegisterModule("Zed", {})
+  Stub.fire("ADDON_LOADED", "Hearthkeep")
+  Stub.fire("PLAYER_LOGIN")
   local panel
   Settings = {
     RegisterCanvasLayoutCategory = function(p) panel = p return {} end,

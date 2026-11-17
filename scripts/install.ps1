@@ -7,7 +7,7 @@ param([string]$AddOns, [string]$Branch = 'feature/allinone')
 $ErrorActionPreference = 'Stop'
 
 # A junction or symbolic link (for example a dev checkout linked into AddOns) is removed
-# as a link only: Remove-Item -Recurse would follow it and delete the files it points to.
+# as a link only: a recursive delete would follow it and remove the files it points to.
 function Remove-Folder([string]$Path) {
     $item = Get-Item -LiteralPath $Path -Force
     if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {

@@ -50,10 +50,10 @@ local function wrapVisibility(frame)
   local show, hide = frame.Show, frame.Hide
   frame.hkRawShow, frame.hkRawHide = show, hide
   frame.Show = function(self)
-    if self.hkWasShown ~= nil then self.hkWasShown = true else show(self) end
+    if rawget(self, "hkWasShown") ~= nil then self.hkWasShown = true else show(self) end
   end
   frame.Hide = function(self)
-    if self.hkWasShown ~= nil then self.hkWasShown = false else hide(self) end
+    if rawget(self, "hkWasShown") ~= nil then self.hkWasShown = false else hide(self) end
   end
   frame.SetShown = function(self, shown)
     if shown then self:Show() else self:Hide() end
@@ -74,16 +74,16 @@ end
 local function applyLock(frame)
   local name = frame.hkName
   if HUD.unlocked then
-    if frame.hkWasShown == nil and ownerEnabled(name) then
+    if rawget(frame, "hkWasShown") == nil and ownerEnabled(name) then
       frame.hkWasShown = frame:IsShown() and true or false
       frame.hkRawShow(frame)
     end
-  elseif frame.hkWasShown ~= nil then
+  elseif rawget(frame, "hkWasShown") ~= nil then
     local wasShown = frame.hkWasShown
     frame.hkWasShown = nil
     if wasShown then frame.hkRawShow(frame) else frame.hkRawHide(frame) end
   end
-  local placeholder = HUD.unlocked and frame.hkWasShown ~= nil
+  local placeholder = HUD.unlocked and rawget(frame, "hkWasShown") ~= nil
   frame:EnableMouse(placeholder or frame.hkClickable == true)
   if frame.hkHandle then
     if placeholder then frame.hkHandle:SetText(handleText(name)) end
@@ -137,8 +137,9 @@ function HUD.SetUnlocked(unlocked)
   for _, frame in pairs(frames) do
     local ok, err = pcall(applyLock, frame)
     if not ok then HK.Diag.Record("HUD", "lock", err) end
-    if type(frame.hkOnLockChanged) == "function" then
-      ok, err = pcall(frame.hkOnLockChanged, frame, HUD.unlocked)
+    local onLock = rawget(frame, "hkOnLockChanged")
+    if type(onLock) == "function" then
+      ok, err = pcall(onLock, frame, HUD.unlocked)
       if not ok then HK.Diag.Record(frame.hkName or "HUD", "OnLockChanged", err) end
     end
   end

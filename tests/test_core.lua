@@ -37,6 +37,7 @@ test("DisableModule calls OnDisable and persists false", function()
   local disabled = 0
   HK:RegisterModule("Testmod", { OnDisable = function() disabled = disabled + 1 end })
   HK.db = { settings = { modules = {} } }
+  HK:EnableModule("Testmod")
   truthy(HK:DisableModule("Testmod"))
   eq(disabled, 1)
   eq(HK.db.settings.modules.Testmod, false)
