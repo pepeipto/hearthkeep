@@ -2,9 +2,10 @@ local _, HK = ...
 
 -- Group: a window with the party or raid (name, class, level) plus the Hearthkeep version
 -- and gear score of members who also run Hearthkeep. Each player shares only their own
--- score and version over the addon channel "HKGroup" (PARTY or RAID), when the group or
--- the score changes, at most once every 10 seconds. Received messages are accepted only
--- from current group members, parsed strictly, capped, and never answered.
+-- score and version over the addon channel "HKGroup" (PARTY, RAID or INSTANCE_CHAT), when
+-- the group or the score changes, at most once every 10 seconds, and only once every
+-- equipped item has loaded. Received messages are accepted only from current group
+-- members (name, then the unit's player GUID), parsed strictly, capped, never answered.
 local Score, Gear = HK.GearScore, HK.Gear
 local Group = {}
 HK.Group = Group
@@ -19,6 +20,7 @@ local window = {}
 local peers = {}
 local lastSent, lastMessage = nil, nil
 local rosterChanged = true
+local waitingForItems = false
 local started = false
 
 function Group.Available()
@@ -89,7 +91,15 @@ function Group.Roster()
   return list
 end
 
+-- An instance group (dungeon or raid finder) without a home group talks on INSTANCE_CHAT.
+local function instanceOnly()
+  local instance, home = Gear.Num(_G.LE_PARTY_CATEGORY_INSTANCE), Gear.Num(_G.LE_PARTY_CATEGORY_HOME)
+  if not (instance and home) then return false end
+  return Gear.Bool(MODULE, "IsInGroup", instance) and not Gear.Bool(MODULE, "IsInGroup", home)
+end
+
 function Group.Channel()
+  if instanceOnly() then return "INSTANCE_CHAT" end
   if Gear.Bool(MODULE, "IsInRaid") then return "RAID" end
   if Gear.Bool(MODULE, "IsInGroup") then return "PARTY" end
   return nil
@@ -103,7 +113,10 @@ function Group.ScoreForUnit(unit)
   if not HK:IsModuleEnabled(MODULE) then return nil end
   local key = unitKey(unit, myRealm())
   local peer = key and peers[key]
-  return peer and peer.score or nil
+  if not peer then return nil end
+  local guid = Gear.UnitGuid(unit)
+  if peer.guid and guid and guid ~= peer.guid then return nil end
+  return peer.score
 end
 
 -- Keeps only data from people still in the group.
@@ -124,14 +137,17 @@ function Group.Receive(prefix, text, channel, sender)
   local realm = myRealm()
   local key = Score.SenderKey(sender, realm)
   if not key or key == Group.MyKey() then return false end
-  local member = false
+  -- Name first, then the GUID of that member's unit: it must be a player.
+  local unit
   for _, entry in ipairs(Group.Roster()) do
-    if entry.key == key then member = true break end
+    if entry.key == key then unit = entry.unit break end
   end
-  if not member then return false end
+  if not unit then return false end
+  local guid = Gear.UnitGuid(unit)
+  if guid and not guid:match("^Player%-") then return false end
   local score, version = Score.ParseGroupMessage(text)
   if not score then return false end
-  peers[key] = { score = score, version = version }
+  peers[key] = { score = score, version = version, guid = guid }
   Group.Refresh()
   return true
 end
@@ -146,8 +162,14 @@ function Group.SendNow()
     HK:Debounce("HKGroupSend", GAP - (now - lastSent), Group.SendNow)
     return false
   end
-  local score, counted = Gear.PlayerScore()
+  local score, counted, missing = Gear.PlayerScore()
   if counted == 0 then return false end
+  -- Never share a partial score: GET_ITEM_INFO_RECEIVED asks again once items load.
+  if missing > 0 then
+    waitingForItems = true
+    return false
+  end
+  waitingForItems = false
   local version = HK.Version and HK.Version.Current() or nil
   local message = Score.BuildGroupMessage(score, version or "0.0.0")
   if not message then return false end
@@ -273,6 +295,9 @@ function Group.Start()
     end)
     Gear.SafeRegister(MODULE, "PLAYER_ENTERING_WORLD", function() Group.Request(true) end)
     Gear.SafeRegister(MODULE, "PLAYER_EQUIPMENT_CHANGED", function() Group.Request(false) end)
+    Gear.SafeRegister(MODULE, "GET_ITEM_INFO_RECEIVED", function()
+      if waitingForItems then Group.Request(false) end
+    end)
     Gear.SafeRegister(MODULE, "CHAT_MSG_ADDON", function(_, prefix, text, channel, sender)
       Group.Receive(prefix, text, channel, sender)
     end)

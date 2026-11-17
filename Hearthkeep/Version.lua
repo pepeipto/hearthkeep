@@ -52,27 +52,68 @@ function Version.Handle(_, text)
   print("Hearthkeep: " .. string.format(HK.L.UPDATE_AVAILABLE, text))
 end
 
-local function channels()
-  local list = {}
-  local function yes(name) return type(_G[name]) == "function" and _G[name]() end
-  if yes("IsInGuild") then list[#list + 1] = "GUILD" end
-  if yes("IsInRaid") then
-    list[#list + 1] = "RAID"
-  elseif yes("IsInGroup") then
-    list[#list + 1] = "PARTY"
-  end
-  return list
+-- When announcements go out: GUILD once per session (at login) plus explicit requests;
+-- the group only when the player joins a new group (not on every roster change); and
+-- never twice within MIN_GAP seconds on the same channel.
+local MIN_GAP = 60
+local lastAnnounced = {}
+local guildAnnounced = false
+local wasInGroup = false
+
+local function yes(name)
+  local fn = _G[name]
+  if type(fn) ~= "function" then return false end
+  local ok, value = pcall(fn)
+  if not ok or (HK.Compat and HK.Compat.IsSecret(value)) then return false end
+  return value and true or false
 end
 
-function Version.Announce()
+local function now()
+  if type(_G.GetTime) ~= "function" then return nil end
+  local ok, value = pcall(_G.GetTime)
+  if not ok or type(value) ~= "number" or (HK.Compat and HK.Compat.IsSecret(value)) then return nil end
+  return value
+end
+
+local function groupChannel()
+  if yes("IsInRaid") then return "RAID" end
+  if yes("IsInGroup") then return "PARTY" end
+  return nil
+end
+
+-- which = { guild = bool, group = bool }; nil means both (an explicit request).
+function Version.Announce(which)
+  which = which or { guild = true, group = true }
   local current = Version.Current()
   if not (Version.Available() and current) then return false end
+  local list = {}
+  if which.guild and yes("IsInGuild") then list[#list + 1] = "GUILD" end
+  local group = which.group and groupChannel()
+  if group then list[#list + 1] = group end
+  local t = now()
   local sent = false
-  for _, channel in ipairs(channels()) do
-    local ok = pcall(_G.C_ChatInfo.SendAddonMessage, PREFIX, current, channel)
-    sent = sent or ok
+  for _, channel in ipairs(list) do
+    local last = lastAnnounced[channel]
+    if not (t and last and t - last < MIN_GAP) then
+      local ok = pcall(_G.C_ChatInfo.SendAddonMessage, PREFIX, current, channel)
+      if ok then
+        lastAnnounced[channel] = t
+        sent = true
+      end
+    end
   end
   return sent
+end
+
+-- GROUP_ROSTER_UPDATE: announce only when the player went from no group to a group.
+function Version.RosterChanged()
+  local inGroup = groupChannel() ~= nil
+  local joined = inGroup and not wasInGroup
+  wasInGroup = inGroup
+  if joined and Version.Available() then
+    HK:Debounce("announceGroup", 5, function() Version.Announce({ group = true }) end)
+  end
+  return joined
 end
 
 function Version.Start()
@@ -81,13 +122,14 @@ function Version.Start()
     return
   end
   pcall(_G.C_ChatInfo.RegisterAddonMessagePrefix, PREFIX)
-  HK:Debounce("announce", 5, Version.Announce)
+  wasInGroup = groupChannel() ~= nil
+  local guild = not guildAnnounced
+  guildAnnounced = true
+  HK:Debounce("announce", 5, function() Version.Announce({ guild = guild, group = true }) end)
 end
 
 HK:RegisterEvent("PLAYER_LOGIN", function() Version.Start() end)
-HK:RegisterEvent("GROUP_ROSTER_UPDATE", function()
-  if Version.Available() then HK:Debounce("announce", 5, Version.Announce) end
-end)
+HK:RegisterEvent("GROUP_ROSTER_UPDATE", function() Version.RosterChanged() end)
 HK:RegisterEvent("CHAT_MSG_ADDON", function(_, prefix, text, _, sender)
   if prefix == PREFIX then Version.Handle(sender, text) end
 end)

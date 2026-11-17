@@ -272,10 +272,29 @@ function Gear.NewWindow(name, width, height)
   return frame
 end
 
--- holder.frame is created on first use (never in combat), shown and painted.
+-- Windows asked for in combat before they existed: opened when combat ends.
+local queued = {}
+local regenWatched = {}
+
+local function openQueued(module)
+  if Gear.InCombat() then return end
+  for holder, entry in pairs(queued) do
+    if entry.module == module then
+      queued[holder] = nil
+      if HK:IsModuleEnabled(module) then Gear.ShowWindow(holder, module, entry.create, entry.paint) end
+    end
+  end
+end
+
+-- holder.frame is created on first use (never in combat: then it opens after combat),
+-- shown and painted.
 function Gear.ShowWindow(holder, module, create, paint)
   if not holder.frame then
     if Gear.InCombat() then
+      queued[holder] = { module = module, create = create, paint = paint }
+      if not regenWatched[module] then
+        regenWatched[module] = Gear.SafeRegister(module, "PLAYER_REGEN_ENABLED", function() openQueued(module) end)
+      end
       Gear.Say(HK.L.GEAR_COMBAT)
       return false
     end
@@ -298,6 +317,7 @@ function Gear.Paint(holder, module, paint)
 end
 
 function Gear.HideWindow(holder)
+  queued[holder] = nil
   if holder.frame then holder.frame:Hide() end
 end
 

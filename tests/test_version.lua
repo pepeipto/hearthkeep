@@ -150,3 +150,75 @@ test("a forged huge version does not silence later real notices", function()
   HK.Version.Handle("Anna", "0.3.0")
   eq(lines(), 2)
 end)
+
+test("the same channel gets at most one announcement a minute", function()
+  local HK = setup("0.2.0")
+  local sent, registered = {}, {}
+  messaging(sent, registered)
+  IsInGuild = function() return true end
+  IsInGroup = function() return false end
+  IsInRaid = function() return false end
+  eq(HK.Version.Announce(), true)
+  eq(HK.Version.Announce(), false)
+  eq(#sent, 1)
+  Stub.time = Stub.time + 59
+  HK.Version.Announce()
+  eq(#sent, 1)
+  Stub.time = Stub.time + 2
+  eq(HK.Version.Announce(), true)
+  eq(#sent, 2)
+end)
+
+test("roster updates announce only on joining a group, and never to the guild", function()
+  setup("0.2.0")
+  local sent, registered = {}, {}
+  messaging(sent, registered)
+  local grouped = false
+  IsInGuild = function() return true end
+  IsInGroup = function() return grouped end
+  IsInRaid = function() return false end
+  Stub.fire("PLAYER_LOGIN")
+  Stub.flushTimers()
+  eq(sent, { { "Hearthkeep", "0.2.0", "GUILD" } })
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  Stub.flushTimers()
+  eq(#sent, 1)
+  grouped = true
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  Stub.flushTimers()
+  eq(#sent, 2)
+  eq(sent[2], { "Hearthkeep", "0.2.0", "PARTY" })
+  Stub.time = Stub.time + 120
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  Stub.flushTimers()
+  eq(#sent, 2)
+  grouped = false
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  grouped = true
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  Stub.flushTimers()
+  eq(#sent, 3)
+  eq(sent[3][3], "PARTY")
+end)
+
+test("rejoining within a minute does not announce to the group again", function()
+  setup("0.2.0")
+  local sent, registered = {}, {}
+  messaging(sent, registered)
+  local grouped = false
+  IsInGuild = function() return false end
+  IsInGroup = function() return grouped end
+  IsInRaid = function() return false end
+  Stub.fire("PLAYER_LOGIN")
+  grouped = true
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  Stub.flushTimers()
+  eq(#sent, 1)
+  grouped = false
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  grouped = true
+  Stub.fire("GROUP_ROSTER_UPDATE")
+  Stub.flushTimers()
+  eq(#sent, 1)
+end)

@@ -74,81 +74,278 @@ function Sets.Delete(name)
   return true, found
 end
 
--- Equips the links of a set that are in the bags. Returns equipped, skipped.
-local function equipLinks(set)
-  local actions, missing = Score.PlanEquip(clean(set), Gear.EquippedLinks("player"), Gear.BagLinks())
-  local equip = Gear.Api("C_Item.EquipItemByName", "EquipItemByName")
-  if not equip then
-    HK.Diag.Record(MODULE, "EquipItemByName", "missing")
-    return 0, #actions + #missing
-  end
-  local done, skipped = 0, #missing
-  for _, action in ipairs(actions) do
-    if Gear.Call(MODULE, "EquipItemByName", equip, action.link, action.slot) then
-      done = done + 1
-    else
-      skipped = skipped + 1
-    end
-  end
-  return done, skipped
+-- Equipping ------------------------------------------------------------------------------
+--
+-- Items are moved by position: picked up from their bag slot (or from the other equipped
+-- slot) and put on with EquipCursorItem, so the right copy is used. The game applies the
+-- change a moment later, so the result is read back after VERIFY_DELAY seconds and only
+-- the items really worn then count as equipped.
+
+local VERIFY_DELAY = 1
+Sets.busy = false
+
+local function say(key, ...)
+  Gear.Say(string.format(HK.L[key], ...))
 end
 
--- Returns true, name, equipped, skipped or false, reason ("combat" | "unknown").
-function Sets.Equip(name)
+local function container(name)
+  return Gear.Api("C_Container." .. name, name)
+end
+
+-- true / false when the client can tell whether the cursor holds an item; nil otherwise.
+local function cursorHolds()
+  local fn = Gear.Api("CursorHasItem")
+  if not fn then return nil end
+  local ok, value = Gear.Call(MODULE, "CursorHasItem", fn)
+  if not ok or HK.Compat.IsSecret(value) then return nil end
+  return value and true or false
+end
+
+local function clearCursor()
+  local fn = Gear.Api("ClearCursor")
+  if fn then Gear.Call(MODULE, "ClearCursor", fn) end
+end
+
+local function later(delay, fn)
+  local after = Gear.Api("C_Timer.After")
+  if not (after and Gear.Call(MODULE, "C_Timer.After", after, delay, fn)) then fn() end
+end
+
+-- { { bag = , free = } } for ordinary bags (not quivers or other special bags) with room.
+local function freeBags()
+  local list = {}
+  local numFree = container("GetContainerNumFreeSlots")
+  if not numFree then return list end
+  local last = Gear.Num(_G.NUM_BAG_SLOTS) or 4
+  if last < 0 or last > 10 then last = 4 end
+  for bag = 0, last do
+    local ok, free, family = Gear.Call(MODULE, "GetContainerNumFreeSlots", numFree, bag)
+    free = ok and Gear.Num(free) or 0
+    family = ok and Gear.Num(family) or 0
+    if free > 0 and family == 0 then list[#list + 1] = { bag = bag, free = free } end
+  end
+  return list
+end
+
+-- Puts the item on the cursor into a bag: the backpack, or the bag in inventory slot
+-- 19 + bag (the classic layout) when the client has no ContainerIDToInventoryID.
+local function putInBag(bag)
+  if bag == 0 then
+    local fn = Gear.Api("PutItemInBackpack")
+    if not fn then return false end
+    return (Gear.Call(MODULE, "PutItemInBackpack", fn))
+  end
+  local invSlot
+  local toInventory = container("ContainerIDToInventoryID")
+  if toInventory then
+    local ok, id = Gear.Call(MODULE, "ContainerIDToInventoryID", toInventory, bag)
+    invSlot = ok and Gear.Num(id) or nil
+  end
+  invSlot = invSlot or (19 + bag)
+  local fn = Gear.Api("PutItemInBag")
+  if not fn then return false end
+  return (Gear.Call(MODULE, "PutItemInBag", fn, invSlot))
+end
+
+-- Runs one planned action (see Score.PlanEquip). Returns true when the game took it,
+-- or false and "full" when there was no bag room to take an item off.
+local function runAction(action, free)
+  local pickupInventory = Gear.Api("PickupInventoryItem")
+  if action.unequip then
+    local place = free[1]
+    if not place then return false, "full" end
+    if not (pickupInventory and Gear.Call(MODULE, "PickupInventoryItem", pickupInventory, action.slot)) then
+      return false
+    end
+    if cursorHolds() == false then return false end
+    if not putInBag(place.bag) or cursorHolds() then
+      clearCursor()
+      return false
+    end
+    place.free = place.free - 1
+    if place.free <= 0 then table.remove(free, 1) end
+    return true
+  end
+  local equip = Gear.Api("EquipCursorItem")
+  if not equip then
+    HK.Diag.Record(MODULE, "EquipCursorItem", "missing")
+    return false
+  end
+  if action.fromSlot then
+    if not (pickupInventory and Gear.Call(MODULE, "PickupInventoryItem", pickupInventory, action.fromSlot)) then
+      return false
+    end
+  else
+    -- The bag place must still hold the planned item.
+    local itemLink, pickup = container("GetContainerItemLink"), container("PickupContainerItem")
+    if not (itemLink and pickup) then return false end
+    local ok, link = Gear.Call(MODULE, "GetContainerItemLink", itemLink, action.bag, action.bagSlot)
+    if not ok or Score.ItemId(Gear.Str(link)) ~= Score.ItemId(action.link) then return false end
+    if not Gear.Call(MODULE, "PickupContainerItem", pickup, action.bag, action.bagSlot) then return false end
+  end
+  if cursorHolds() == false then return false end
+  if not Gear.Call(MODULE, "EquipCursorItem", equip, action.slot) or cursorHolds() then
+    clearCursor()
+    return false
+  end
+  return true
+end
+
+-- Applies a set (slot -> link, or false for "empty"). onDone(done, skipped, full, before,
+-- after) runs once the result can be read back: done = items really changed as planned,
+-- skipped = the rest plus the missing ones, full = items not taken off for lack of room.
+local function applySet(set, onDone)
+  local before = Gear.EquippedLinks("player")
+  local actions, missing = Score.PlanEquip(set, before, Gear.BagLinks())
+  local free = freeBags()
+  local sent, skipped, full = {}, #missing, 0
+  for _, action in ipairs(actions) do
+    local ok, why = runAction(action, free)
+    if ok then
+      sent[#sent + 1] = action
+    else
+      skipped = skipped + 1
+      if why == "full" then full = full + 1 end
+    end
+  end
+  local function verify()
+    Sets.busy = false
+    local after = Gear.EquippedLinks("player")
+    local done = 0
+    for _, action in ipairs(sent) do
+      local id = Score.ItemId(after[action.slot])
+      local wanted = not action.unequip and Score.ItemId(action.link) or nil
+      if id == wanted then done = done + 1 else skipped = skipped + 1 end
+    end
+    onDone(done, skipped, full, before, after)
+  end
+  if #sent == 0 then
+    verify()
+  else
+    Sets.busy = true
+    later(VERIFY_DELAY, verify)
+  end
+end
+
+-- Returns true, name or false, reason ("combat" | "unknown" | "busy"). onDone(name, done,
+-- skipped) runs when the game has applied the set.
+function Sets.Equip(name, onDone)
   if Gear.InCombat() then return false, "combat" end
   local found = Sets.Find(name)
   if not found then return false, "unknown" end
-  local done, skipped = equipLinks(store().sets[found])
-  return true, found, done, skipped
+  if Sets.busy or cursorHolds() then return false, "busy" end
+  applySet(clean(store().sets[found]), function(done, skipped)
+    if onDone then onDone(found, done, skipped) end
+  end)
+  return true, found
 end
 
 -- Auto-swap -----------------------------------------------------------------------------
+--
+-- Saved per character: autoActive ("mounted" | "resting"), autoBefore (slot -> link or
+-- false for every slot, as worn before the swap) and autoPut (slot -> what the swap left
+-- in that slot, link or false). Going back only touches slots that still hold what the
+-- swap put there, so anything the player changed meanwhile is left alone.
+
+local triedTarget
 
 function Sets.AutoOn()
   return store().auto == true
 end
 
+local function snapshot(links)
+  local out = {}
+  for slot = 1, 19 do out[slot] = Gear.Str(links[slot]) or false end
+  return out
+end
+
+local function clearAuto(d)
+  d.autoActive, d.autoBefore, d.autoPut = nil, nil, nil
+  triedTarget = nil
+end
+
+-- Puts back the gear worn before the auto-swap. Out of combat only.
+local function restore(d)
+  local before, put = d.autoBefore, d.autoPut
+  clearAuto(d)
+  if type(before) ~= "table" or type(put) ~= "table" then return false end
+  local now = Gear.EquippedLinks("player")
+  local set = {}
+  for slot = 1, 19 do
+    local left, old = put[slot], before[slot]
+    local ours = (left == false and now[slot] == nil)
+      or (type(left) == "string" and Score.ItemId(left) ~= nil and Score.ItemId(now[slot]) == Score.ItemId(left))
+    if ours and (old == false or type(old) == "string") then set[slot] = old end
+  end
+  applySet(set, function(_, _, full)
+    if full > 0 then say("SETS_BAGS_FULL", full) end
+    Sets.Refresh()
+  end)
+  return true
+end
+
+local function wearAuto(d, target, setName, active)
+  local before = snapshot(Gear.EquippedLinks("player"))
+  triedTarget = target
+  applySet(clean(d.sets[setName]), function(done, _, _, runBefore, after)
+    if not HK:IsModuleEnabled(MODULE) then return end
+    local put = {}
+    if active and type(d.autoPut) == "table" then
+      for slot, left in pairs(d.autoPut) do put[slot] = left end
+    end
+    for slot = 1, 19 do
+      if Score.ItemId(runBefore[slot]) ~= Score.ItemId(after[slot]) then
+        put[slot] = Gear.Str(after[slot]) or false
+      end
+    end
+    if active then
+      d.autoActive, d.autoPut = target, put
+    elseif done > 0 then
+      d.autoActive, d.autoBefore, d.autoPut = target, before, put
+    end
+  end)
+end
+
 function Sets.CheckAuto()
   if not HK:IsModuleEnabled(MODULE) then return false end
   local d = store()
-  if d.auto ~= true then return false end
+  local active = (d.autoActive == "mounted" or d.autoActive == "resting") and d.autoActive or nil
+  if d.auto ~= true and not active then return false end
   if Gear.InCombat() then
     Sets.pending = true
     return false
   end
   Sets.pending = false
-  local mountedSet, restingSet = Sets.Find("mounted"), Sets.Find("resting")
-  local target = Score.AutoTarget(Gear.Bool(MODULE, "IsMounted"), Gear.Bool(MODULE, "IsResting"),
-    mountedSet ~= nil, restingSet ~= nil)
-  local active = (d.autoActive == "mounted" or d.autoActive == "resting") and d.autoActive or nil
-  if target == active then return false end
-  if target then
-    if not active then d.autoBefore = Gear.EquippedLinks("player") end
-    equipLinks(d.sets[target == "mounted" and mountedSet or restingSet])
-  else
-    if type(d.autoBefore) == "table" then equipLinks(d.autoBefore) end
-    d.autoBefore = nil
+  if Sets.busy or cursorHolds() then
+    HK:Debounce("HKSetsAuto", 1, Sets.CheckAuto)
+    return false
   end
-  d.autoActive = target
+  local target, mountedSet, restingSet
+  if d.auto == true then
+    mountedSet, restingSet = Sets.Find("mounted"), Sets.Find("resting")
+    target = Score.AutoTarget(Gear.Bool(MODULE, "IsMounted"), Gear.Bool(MODULE, "IsResting"),
+      mountedSet ~= nil, restingSet ~= nil)
+  end
+  if not target then triedTarget = nil end
+  if target == active then return false end
+  if not target then return restore(d) end
+  -- A swap that changed nothing is not retried until the situation changes.
+  if not active and target == triedTarget then return false end
+  wearAuto(d, target, target == "mounted" and mountedSet or restingSet, active)
   return true
 end
 
+-- Turning auto-swap off puts the old gear back now, or after combat.
 function Sets.SetAuto(on)
   local d = store()
   d.auto = on and true or false
-  if not d.auto and d.autoActive and not Gear.InCombat() then
-    if type(d.autoBefore) == "table" then equipLinks(d.autoBefore) end
-    d.autoBefore, d.autoActive = nil, nil
-  end
-  if d.auto then HK:Debounce("HKSetsAuto", 0.5, Sets.CheckAuto) end
+  triedTarget = nil
+  if not d.auto and d.autoActive and Gear.InCombat() then Sets.pending = true end
+  HK:Debounce("HKSetsAuto", 0.5, Sets.CheckAuto)
   return d.auto
 end
 
 -- Commands and window -------------------------------------------------------------------
-
-local function say(key, ...)
-  Gear.Say(string.format(HK.L[key], ...))
-end
 
 function Sets.Run(action, name)
   if action == "save" then
@@ -161,14 +358,19 @@ function Sets.Run(action, name)
       say("SETS_BAD_NAME")
     end
   elseif action == "equip" then
-    local ok, result, _, skipped = Sets.Equip(name)
-    if ok then
-      say("SETS_EQUIPPED", result)
+    local ok, result = Sets.Equip(name, function(found, _, skipped)
+      say("SETS_EQUIPPED", found)
       if skipped > 0 then say("SETS_MISSING_ITEMS", skipped) end
-    elseif result == "combat" then
-      say("SETS_COMBAT")
-    else
-      say("SETS_UNKNOWN", tostring(name))
+      Sets.Refresh()
+    end)
+    if not ok then
+      if result == "combat" then
+        say("SETS_COMBAT")
+      elseif result == "busy" then
+        say("SETS_BUSY")
+      else
+        say("SETS_UNKNOWN", tostring(name))
+      end
     end
   elseif action == "delete" then
     local ok, found = Sets.Delete(name)
@@ -301,6 +503,11 @@ HK:RegisterModule(MODULE, {
   OnEnable = function() Sets.Start() end,
   OnDisable = function()
     Sets.pending = false
+    -- Put the old gear back now; in combat (or mid-swap) just forget the swap.
+    local d = store()
+    if d.autoActive then
+      if Gear.InCombat() or Sets.busy then clearAuto(d) else restore(d) end
+    end
     Gear.HideWindow(window)
   end,
 })
