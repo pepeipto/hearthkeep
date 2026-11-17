@@ -90,30 +90,64 @@ test("FormatDuration", function()
   eq(Alts.Window.FormatDuration(30), "1m")
 end)
 
-test("empty store shows the no-characters message", function()
-  local _, Alts = setup()
+
+-- Logs in, empties the store (login saves the current character) and opens the
+-- Characters page of the Hearthkeep window. Returns the page frame.
+local function openPage(HK, Alts)
+  Stub.fire("PLAYER_LOGIN")
+  for key in pairs(HK.db.characters) do HK.db.characters[key] = nil end
+  truthy(Alts.Window.Open())
+  local holder = Alts.Window.PageHolder()
+  truthy(holder, "the Characters page was not built")
+  return holder
+end
+
+-- The stub has no profession or spell APIs, so the login snapshot records those reads;
+-- everything else (page, card, UI kit, window) must stay clean.
+local CAPTURE_FIELDS = { professions = true, cooldowns = true }
+
+local function noErrors(HK)
+  for _, m in ipairs({ "Alts", "Home", "UI" }) do
+    for _, e in ipairs(HK.Diag.Last(m)) do
+      if not (m == "Alts" and CAPTURE_FIELDS[e.field]) then
+        eq(m .. " " .. e.field .. ": " .. e.err, nil)
+      end
+    end
+  end
+end
+
+test("empty store shows the no-characters message on the page", function()
+  local HK, Alts = setup()
   eq(Alts.Window.BuildRows({}), {})
-  Alts.Window.Toggle()
-  eq(Alts.Window.emptyText.text, "No characters saved yet.")
+  local holder = openPage(HK, Alts)
+  eq(holder.empty.text, "No characters saved yet.")
+  noErrors(HK)
 end)
 
-test("Toggle creates the frame once and shows then hides it", function()
-  local _, Alts = setup()
-  Alts.Window.Toggle()
-  local frame = Alts.Window.frame
+test("Toggle opens the Characters page in the Hearthkeep window and closes it again", function()
+  local HK, Alts = setup()
+  Stub.fire("PLAYER_LOGIN")
+  truthy(Alts.Window.Toggle())
+  local frame = HK.Home.frame
   truthy(frame:IsShown())
-  Alts.Window.Toggle()
+  eq(HK.Home.selected, "Alts")
+  eq(HK.Home.section, "characters")
+  falsy(Alts.Window.Toggle())
   falsy(frame:IsShown())
-  Alts.Window.Toggle()
-  eq(Alts.Window.frame, frame)
+  truthy(Alts.Window.Toggle())
+  eq(HK.Home.frame, frame)
   truthy(frame:IsShown())
 end)
 
-test("the window opens regardless of combat state", function()
-  local _, Alts = setup()
-  InCombatLockdown = function() return true end
-  Alts.Window.Toggle()
-  truthy(Alts.Window.frame:IsShown())
+test("no window is created in combat; it opens after", function()
+  local HK, Alts = setup()
+  Stub.fire("PLAYER_LOGIN")
+  Stub.inCombat = true
+  falsy(Alts.Window.Toggle())
+  eq(HK.Home.frame, nil)
+  Stub.inCombat = false
+  truthy(Alts.Window.Toggle())
+  truthy(HK.Home.frame:IsShown())
 end)
 
 test("SetSort toggles direction on the same column and persists", function()
@@ -130,6 +164,22 @@ test("SetSort toggles direction on the same column and persists", function()
   eq(HK.db.ui.desc, true)
 end)
 
+test("clicking a column header sorts the table and marks the column", function()
+  local HK, Alts = setup()
+  local holder = openPage(HK, Alts)
+  save(Alts, "a", { name = "Alice", money = 100 })
+  save(Alts, "b", { name = "Bob", money = 900 })
+  local money
+  for _, header in ipairs(holder.headers) do
+    if header.column.sort == "money" then money = header end
+  end
+  money.scripts.OnClick(money)
+  eq(HK.db.ui.sort, "money")
+  eq(money.label.text, "Gold v")
+  eq(Alts.Window.data[1].key, "b")
+  noErrors(HK)
+end)
+
 test("CycleRealm walks all realms and back", function()
   local HK, Alts = setup()
   save(Alts, "a", { realm = "Thunder" })
@@ -142,34 +192,56 @@ test("CycleRealm walks all realms and back", function()
   eq(HK.db.ui.realm, nil)
 end)
 
-test("HideCharacter and DeleteCharacter update the store and refresh", function()
-  local _, Alts = setup()
+test("HideCharacter and DeleteCharacter update the store and the page", function()
+  local HK, Alts = setup()
+  local holder = openPage(HK, Alts)
   save(Alts, "a", { money = 100 })
   save(Alts, "b", { money = 250 })
-  Alts.Window.Toggle()
-  eq(Alts.Window.footerText.text, "Total gold: 3s 50c")
+  Alts.Window.Refresh()
+  eq(holder.footer.text, "Total gold: 3s 50c")
+  falsy(holder.unhide:IsShown())
   Alts.Window.HideCharacter("b")
-  eq(Alts.Window.footerText.text, "Total gold: 1s")
+  eq(holder.footer.text, "Total gold: 1s")
+  truthy(holder.unhide:IsShown())
+  eq(holder.unhide.label.text, "Show hidden (1)")
   Alts.Window.DeleteCharacter("a")
-  eq(Alts.Window.emptyText.text, "No characters saved yet.")
+  eq(holder.empty.text, "No characters saved yet.")
+  holder.unhide.scripts.OnClick(holder.unhide)
+  eq(holder.footer.text, "Total gold: 2s 50c")
+  noErrors(HK)
 end)
 
-test("Scroll clamps to the available rows", function()
-  local _, Alts = setup()
+test("the small x button on a row hides that character", function()
+  local HK, Alts = setup()
+  local holder = openPage(HK, Alts)
+  save(Alts, "a", { name = "Alice" })
+  Alts.Window.Refresh()
+  local row = holder.list.rows[1]
+  eq(row.key, "a")
+  row.hide.scripts.OnClick(row.hide)
+  truthy(Alts.Store.Get("a").hidden)
+  noErrors(HK)
+end)
+
+test("the table scrolls and clamps to the available rows", function()
+  local HK, Alts = setup()
+  local holder = openPage(HK, Alts)
   for i = 1, 20 do save(Alts, "k" .. i, { name = "Char" .. i }) end
-  Alts.Window.Toggle()
-  Alts.Window.Scroll(100)
-  eq(Alts.Window.offset, 5)
-  Alts.Window.Scroll(-100)
-  eq(Alts.Window.offset, 0)
+  Alts.Window.Refresh()
+  holder.list:Scroll(-100)
+  truthy(holder.list.offset > 0)
+  eq(holder.list.offset, holder.list:MaxOffset())
+  holder.list:Scroll(100)
+  eq(holder.list.offset, 0)
 end)
 
 test("ShowRowMenu builds the menu without error", function()
   local _, Alts = setup()
   save(Alts, "a")
-  Alts.Window.Toggle()
   Alts.Window.ShowRowMenu("a")
   truthy(Alts.Window.menu)
+  truthy(Alts.Window.menu:IsShown())
+  eq(Alts.Window.menu.name, "HearthkeepAltsRowMenu")
 end)
 
 test("PositionForAngle", function()
@@ -186,13 +258,15 @@ test("AngleFromCursor", function()
   eq(Alts.Minimap.AngleFromCursor(0, 10, 0, 0), 90)
 end)
 
-test("minimap Create is idempotent and clicking toggles the window", function()
-  local _, Alts = setup()
+test("minimap Create is idempotent and clicking opens the Characters page", function()
+  local HK, Alts = setup()
+  Stub.fire("PLAYER_LOGIN")
   local first = Alts.Minimap.Create()
   eq(Alts.Minimap.Create(), first)
   truthy(first:IsShown())
   first.scripts.OnClick(first, "LeftButton")
-  truthy(Alts.Window.frame:IsShown())
+  truthy(HK.Home.frame:IsShown())
+  eq(HK.Home.selected, "Alts")
 end)
 
 test("minimapHidden hides the button", function()
@@ -208,60 +282,36 @@ test("SetAngle persists", function()
   eq(HK.db.settings.minimapAngle, 90)
 end)
 
-test("/hk alts opens the window once the module is loaded", function()
-  local _, Alts = setup()
+test("/hk alts opens the Characters page", function()
+  local HK = setup()
+  Stub.fire("PLAYER_LOGIN")
   SlashCmdList.HEARTHKEEP("alts")
-  truthy(Alts.Window.frame:IsShown())
+  truthy(HK.Home.frame:IsShown())
+  eq(HK.Home.selected, "Alts")
 end)
 
-test("disabling the module hides the window and the button", function()
+test("disabling the module hides the row menu and the button", function()
   local HK, Alts = setup()
   Stub.fire("PLAYER_LOGIN")
-  Alts.Window.Toggle()
+  Alts.Window.Open()
+  Alts.Window.ShowRowMenu("x")
   HK:DisableModule("Alts")
-  falsy(Alts.Window.frame:IsShown())
+  falsy(Alts.Window.menu:IsShown())
   falsy(Alts.Minimap.button:IsShown())
 end)
 
-test("an invalid saved position cannot break the window", function()
+test("left-click on the minimap button opens Alts and does not open the menu", function()
   local HK, Alts = setup()
-  local realCreate = CreateFrame
-  CreateFrame = function(kind, name, ...)
-    local frame = realCreate(kind, name, ...)
-    if name == "HearthkeepAltsWindow" then
-      rawset(frame, "SetPoint", function(_, point)
-        if point == nil then error("bad point") end
-      end)
-    end
-    return frame
-  end
-  HK.db.ui.pos = {}
-  Alts.Window.Toggle()
-  truthy(Alts.Window.frame:IsShown())
-  Alts.Window.Toggle()
-  Alts.Window.Toggle()
-  truthy(Alts.Window.frame:IsShown())
-end)
-
-test("the Alts window is tracked by Skins and restyles on SetActive", function()
-  local HK, Alts = setup()
-  Alts.Window.Toggle()
-  local recorded
-  Alts.Window.frame.SetBackdropColor = function(_, r, g, b, a) recorded = { r, g, b, a } end
-  HK.Skins.SetActive("dark")
-  eq(recorded, HK.Skins.Get("dark").bg)
-end)
-
-test("left-click on the minimap button toggles Alts and does not open the menu", function()
-  local _, Alts = setup()
+  Stub.fire("PLAYER_LOGIN")
   local button = Alts.Minimap.Create()
   button.scripts.OnClick(button, "LeftButton")
-  truthy(Alts.Window.frame:IsShown())
+  truthy(HK.Home.frame:IsShown())
   eq(Alts.Minimap.menu, nil)
 end)
 
 test("the minimap menu lists Modes, Alts and Setup when Modes is loaded and they work", function()
   local HK, Alts = setup()
+  Stub.fire("PLAYER_LOGIN")
   local Modes = _G.Hearthkeep.Modes
   local button = Alts.Minimap.Create()
   button.scripts.OnClick(button, "RightButton")
@@ -272,7 +322,8 @@ test("the minimap menu lists Modes, Alts and Setup when Modes is loaded and they
   Alts.Minimap.menuButtons.MENU_SETUP.scripts.OnClick(Alts.Minimap.menuButtons.MENU_SETUP)
   truthy(HK.Setup.frame)
   Alts.Minimap.menuButtons.MENU_ALTS.scripts.OnClick(Alts.Minimap.menuButtons.MENU_ALTS)
-  truthy(Alts.Window.frame:IsShown())
+  truthy(HK.Home.frame:IsShown())
+  eq(HK.Home.selected, "Alts")
   eq(HK.Modes, Modes)
 end)
 

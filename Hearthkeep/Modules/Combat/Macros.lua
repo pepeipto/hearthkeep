@@ -415,7 +415,7 @@ function Macros.GameCommands()
   return known
 end
 
--- { { index, name, body, scope = "account"|"character" }, ... }
+-- { { index, name, icon, body, scope = "account"|"character" }, ... }
 function Macros.ReadAll()
   local list = {}
   local numAccount, numChar = safe("GetNumMacros", _G.GetNumMacros)
@@ -423,216 +423,295 @@ function Macros.ReadAll()
   if type(numChar) ~= "number" or isSecret(numChar) then numChar = 0 end
   local accountMax = type(_G.MAX_ACCOUNT_MACROS) == "number" and _G.MAX_ACCOUNT_MACROS or 120
   local function read(index, scope)
-    local name, _, body = safe("GetMacroInfo", _G.GetMacroInfo, index)
+    local name, icon, body = safe("GetMacroInfo", _G.GetMacroInfo, index)
     if isSecret(name) or isSecret(body) or type(name) ~= "string" then return end
-    list[#list + 1] = { index = index, name = name, body = type(body) == "string" and body or "", scope = scope }
+    if isSecret(icon) or (type(icon) ~= "number" and type(icon) ~= "string") then icon = nil end
+    list[#list + 1] = { index = index, name = name, icon = icon,
+      body = type(body) == "string" and body or "", scope = scope }
   end
   for i = 1, numAccount do read(i, "account") end
   for i = 1, numChar do read(accountMax + i, "character") end
   return list
 end
 
--- Frames ---------------------------------------------------------------------------
 
-local ROWS = 20
-local ROW_HEIGHT = 18
-local frame
-local state = { page = 1, selected = 1, macros = {}, known = nil }
+-- State ----------------------------------------------------------------------------
+
+-- The macros are read once and analysed again only when the game says they changed
+-- (UPDATE_MACROS) or the page is opened, so the dashboard card stays cheap.
+local state = { selected = 1, macros = {}, known = nil, dirty = true }
 local eventsRegistered = false
+local pageHolder
 
-local function inCombat()
-  return type(_G.InCombatLockdown) == "function" and safe("InCombatLockdown", _G.InCombatLockdown) and true or false
-end
-
-local function button(parent, width, height, onClick)
-  local b = CreateFrame("Button", nil, parent, "UIPanelButtonTemplate")
-  b:SetSize(width, height)
-  b:SetScript("OnClick", onClick)
-  HK.Skins.Track(b, "button")
-  return b
-end
-
-local function create()
-  local f = CreateFrame("Frame", "HearthkeepMacrosFrame", UIParent, "BackdropTemplate")
-  f:SetSize(680, 60 + ROWS * ROW_HEIGHT + 40)
-  f:SetPoint("CENTER")
-  f:SetFrameStrata("DIALOG")
-  f:EnableMouse(true)
-  f:SetMovable(true)
-  f:SetClampedToScreen(true)
-  f:RegisterForDrag("LeftButton")
-  f:SetScript("OnDragStart", function(self) self:StartMoving() end)
-  f:SetScript("OnDragStop", function(self) self:StopMovingOrSizing() end)
-  f:Hide()
-  if type(UISpecialFrames) == "table" then table.insert(UISpecialFrames, "HearthkeepMacrosFrame") end
-
-  f.title = f:CreateFontString(nil, "OVERLAY", "GameFontNormalLarge")
-  f.title:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -14)
-  f.summary = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  f.summary:SetPoint("LEFT", f.title, "RIGHT", 12, 0)
-  f.close = CreateFrame("Button", nil, f, "UIPanelCloseButton")
-  f.close:SetPoint("TOPRIGHT", f, "TOPRIGHT", -4, -4)
-  f.close:SetScript("OnClick", function() Macros.Hide() end)
-
-  f.rows = {}
-  for i = 1, ROWS do
-    local row = CreateFrame("Button", nil, f)
-    row:SetSize(200, ROW_HEIGHT)
-    row:SetPoint("TOPLEFT", f, "TOPLEFT", 16, -44 - (i - 1) * ROW_HEIGHT)
-    row.label = row:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-    row.label:SetAllPoints()
-    row.label:SetJustifyH("LEFT")
-    row:SetScript("OnClick", function(self)
-      if self.macroIndex then Macros.Select(self.macroIndex) end
-    end)
-    f.rows[i] = row
-  end
-  f.prev = button(f, 40, 22, function() Macros.Page(-1) end)
-  f.prev:SetPoint("BOTTOMLEFT", f, "BOTTOMLEFT", 16, 14)
-  f.next = button(f, 40, 22, function() Macros.Page(1) end)
-  f.next:SetPoint("LEFT", f.prev, "RIGHT", 6, 0)
-  f.pageText = f:CreateFontString(nil, "OVERLAY", "GameFontHighlightSmall")
-  f.pageText:SetPoint("LEFT", f.next, "RIGHT", 8, 0)
-
-  local scroll = CreateFrame("ScrollFrame", "HearthkeepMacrosScroll", f, "UIPanelScrollFrameTemplate")
-  scroll:SetPoint("TOPLEFT", f, "TOPLEFT", 230, -44)
-  scroll:SetPoint("BOTTOMRIGHT", f, "BOTTOMRIGHT", -36, 44)
-  local child = CreateFrame("Frame", nil, scroll)
-  child:SetSize(410, 400)
-  scroll:SetScrollChild(child)
-  f.detail = child:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
-  f.detail:SetPoint("TOPLEFT", child, "TOPLEFT", 0, 0)
-  f.detail:SetWidth(410)
-  f.detail:SetJustifyH("LEFT")
-  f.detail:SetJustifyV("TOP")
-  f.child = child
-  f.scroll = scroll
-
-  HK.Skins.Track(f, "window")
-  return f
-end
-
-local function pages()
-  return math.max(1, math.ceil(#state.macros / ROWS))
-end
-
-local function paint()
-  local L = HK.L
-  local f = frame
-  f.title:SetText(L.MACROS_TITLE)
-  local withProblems = 0
-  for _, macro in ipairs(state.macros) do
-    local result = Macros.Analyze(macro.body, state.known)
-    macro.problems = #result.problems
-    if macro.problems > 0 then withProblems = withProblems + 1 end
-  end
-  f.summary:SetText(L.MACROS_SUMMARY:format(#state.macros, withProblems))
-  if state.page > pages() then state.page = pages() end
-  local first = (state.page - 1) * ROWS
-  for i, row in ipairs(f.rows) do
-    local index = first + i
-    local macro = state.macros[index]
-    if macro then
-      row:Show()
-      row.macroIndex = index
-      local mark = macro.problems > 0 and "|cffff6060!|r " or "|cff40ff40+|r "
-      local label = macro.name
-      if index == state.selected then label = "|cffffffff" .. label .. "|r" end
-      local scope = macro.scope == "character" and L.MACROS_CHARACTER or L.MACROS_ACCOUNT
-      row.label:SetText(mark .. label .. " |cff808080(" .. scope .. ")|r")
-    else
-      row:Hide()
-      row.macroIndex = nil
-    end
-  end
-  f.pageText:SetText(state.page .. " / " .. pages())
-  f.prev:SetText(L.MACROS_PREV)
-  f.next:SetText(L.MACROS_NEXT)
-  local text
-  if #state.macros == 0 then
-    text = L.MACROS_NONE
-  else
-    local macro = state.macros[state.selected]
-    if macro then
-      text = table.concat((Macros.Report(macro.name, macro.body, state.known)), "\n")
-    else
-      text = L.MACROS_PICK
-    end
-  end
-  f.detail:SetText(text)
-  local height = f.detail:GetStringHeight()
-  f.child:SetHeight(math.max(400, (type(height) == "number" and height or 0) + 20))
-end
-
-function Macros.Refresh()
-  if not (frame and frame:IsShown()) then return end
-  local ok, err = pcall(paint)
-  if not ok then HK.Diag.Record(NAME, "paint", err) end
+local function changed()
+  if HK.Home then HK.Home.Changed(NAME) end
 end
 
 local function reload()
   state.macros = Macros.ReadAll()
   local ok, known = pcall(Macros.GameCommands)
   if ok then state.known = known else HK.Diag.Record(NAME, "GameCommands", known) end
+  for _, macro in ipairs(state.macros) do
+    local done, result = pcall(Macros.Analyze, macro.body, state.known)
+    if not done then
+      HK.Diag.Record(NAME, "Analyze", result)
+      result = { length = #macro.body, problems = {}, lines = {} }
+    end
+    macro.result = result
+    macro.problems = #result.problems
+  end
   if state.selected > #state.macros then state.selected = 1 end
+  state.dirty = false
 end
+
+local function ensureLoaded()
+  if state.dirty then reload() end
+  return state.macros
+end
+
+-- { total, bad, names = { names of the macros with problems } }
+function Macros.Summary()
+  local summary = { total = 0, bad = 0, names = {} }
+  for _, macro in ipairs(ensureLoaded()) do
+    summary.total = summary.total + 1
+    if macro.problems > 0 then
+      summary.bad = summary.bad + 1
+      summary.names[#summary.names + 1] = macro.name
+    end
+  end
+  return summary
+end
+
+-- Dashboard card: an alert when at least one macro has a problem, nothing otherwise.
+function Macros.Card()
+  local summary = Macros.Summary()
+  if summary.bad == 0 then return nil end
+  local L = HK.L
+  local names = {}
+  for i = 1, math.min(3, #summary.names) do names[i] = summary.names[i] end
+  local sub = table.concat(names, ", ")
+  if #summary.names > 3 then sub = sub .. ", ..." end
+  return {
+    title = L.MOD_MACROS,
+    value = (summary.bad == 1 and L.MACROS_CARD_ONE or L.MACROS_CARD_MANY):format(summary.bad),
+    sub = sub, alert = true, order = 40,
+  }
+end
+
+function Macros.Selected()
+  return state.macros[state.selected], state.selected
+end
+
+-- Page in the Hearthkeep window ------------------------------------------------------
+
+local UI = HK.UI
+local LIST_W = 200
+local ROW_H = 24
+local MAX_PROBLEM_ROWS = 3
+
+-- "|" starts an escape sequence in game text; show it as typed.
+local function plain(text)
+  return (tostring(text or ""):gsub("|", "||"))
+end
+
+local function setIcon(texture, icon)
+  if type(icon) == "number" or (type(icon) == "string" and icon ~= "") then
+    texture:SetTexture(icon)
+  else
+    texture:SetTexture(UI.IconPath("fallback"))
+  end
+end
+
+local function refreshPage(holder) end   -- defined below
 
 function Macros.Select(index)
   if not state.macros[index] then return false end
   state.selected = index
-  Macros.Refresh()
+  if pageHolder then
+    local ok, err = pcall(refreshPage, pageHolder)
+    if not ok then HK.Diag.Record(NAME, "Page.refresh", err) end
+  end
   return true
 end
 
-function Macros.Page(delta)
-  local page = state.page + delta
-  if page < 1 or page > pages() then return false end
-  state.page = page
-  Macros.Refresh()
-  return true
+local function buildRow(row, i)
+  row.stripe = (i % 2 == 0) and "card" or "window"
+  row.icon = UI.Icon(row, 18, "fallback")
+  row.icon:SetPoint("LEFT", row, "LEFT", 4, 0)
+  row.name = UI.Text(row, "small", "text")
+  row.name:SetPoint("LEFT", row.icon, "RIGHT", 6, 0)
+  row.name:SetPoint("RIGHT", row, "RIGHT", -20, 0)
+  if row.name.SetWordWrap then row.name:SetWordWrap(false) end
+  row.dot = UI.Panel(row, "good")
+  row.dot:SetSize(8, 8)
+  row.dot:SetPoint("RIGHT", row, "RIGHT", -8, 0)
+  row:SetScript("OnClick", function(self) if self.index then Macros.Select(self.index) end end)
 end
 
+local function fillRow(row, macro, index)
+  row.index = index
+  setIcon(row.icon, macro.icon)
+  row.name:SetText(plain(macro.name))
+  local bad = (macro.problems or 0) > 0
+  UI.SetPanelColors(row.dot, bad and "bad" or "good")
+  local selected = index == state.selected
+  UI.SetPanelColors(row, selected and "select" or row.stripe, selected and "gold" or nil)
+  UI.SetTextColorKey(row.name, selected and "gold" or (bad and "bad" or "text"))
+end
+
+local function buildPage(holder, w, h)
+  pageHolder = holder
+  w = (type(w) == "number" and w > 0) and w or 568
+  h = (type(h) == "number" and h > 0) and h or 330
+  holder.summary = UI.Text(holder, "small", "muted")
+  holder.summary:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+  holder.summary:SetWidth(LIST_W)
+  holder.list = UI.List(holder, LIST_W, h - 20, ROW_H, buildRow, fillRow)
+  holder.list:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -20)
+
+  local dw = w - LIST_W - 10
+  local detail = UI.Panel(holder, "card", "line")
+  detail:SetSize(dw, h)
+  detail:SetPoint("TOPLEFT", holder, "TOPLEFT", LIST_W + 10, 0)
+  holder.detail = detail
+  holder.icon = UI.Icon(detail, 24, "fallback")
+  holder.icon:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -8)
+  holder.name = UI.Text(detail, "large", "gold")
+  holder.name:SetPoint("LEFT", holder.icon, "RIGHT", 8, 0)
+  holder.scope = UI.Text(detail, "small", "faint", "RIGHT")
+  holder.scope:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -10, -12)
+  holder.length = UI.Text(detail, "small", "muted")
+  holder.length:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -40)
+  holder.lengthBar = UI.Bar(detail, 120, 6)
+  holder.lengthBar:SetPoint("TOPRIGHT", detail, "TOPRIGHT", -10, -44)
+
+  holder.bodyBox = UI.Panel(detail, "window", "line")
+  holder.bodyBox:SetSize(dw - 20, 78)
+  holder.bodyBox:SetPoint("TOPLEFT", detail, "TOPLEFT", 10, -58)
+  holder.body = UI.Text(holder.bodyBox, "small", "text")
+  holder.body:SetPoint("TOPLEFT", holder.bodyBox, "TOPLEFT", 8, -6)
+  holder.body:SetPoint("BOTTOMRIGHT", holder.bodyBox, "BOTTOMRIGHT", -8, 6)
+  if holder.body.SetJustifyV then holder.body:SetJustifyV("TOP") end
+
+  holder.ok = UI.Text(detail, "small", "good")
+  holder.problemRows = {}
+  for i = 1, MAX_PROBLEM_ROWS do
+    local row = UI.Panel(detail, "window", "bad")
+    row:SetSize(dw - 20, 30)
+    row.text = UI.Text(row, "small", "bad")
+    row.text:SetPoint("TOPLEFT", row, "TOPLEFT", 8, -4)
+    row.text:SetPoint("BOTTOMRIGHT", row, "BOTTOMRIGHT", -8, 4)
+    if row.text.SetJustifyV then row.text:SetJustifyV("TOP") end
+    holder.problemRows[i] = row
+  end
+  holder.condTitle = UI.Text(detail, "small", "gold")
+  holder.conditions = UI.Text(detail, "small", "text")
+  if holder.conditions.SetJustifyV then holder.conditions:SetJustifyV("TOP") end
+  holder.conditions:SetPoint("BOTTOMRIGHT", detail, "BOTTOMRIGHT", -10, 8)
+
+  holder.empty = UI.Empty(holder, "")
+end
+
+local function explanationText(result)
+  local L = HK.L
+  local gold, muted = UI.Hex("gold"), UI.Hex("muted")
+  local parts = {}
+  for _, entry in ipairs(result.lines or {}) do
+    for _, item in ipairs(Macros.ExplainLine(entry)) do
+      local head = item.conditions ~= "" and (gold .. plain(item.conditions) .. "|r ") or ""
+      parts[#parts + 1] = head .. plain(item.value) .. "\n" .. muted .. "   " .. plain(item.text) .. "|r"
+    end
+  end
+  if #parts == 0 then return muted .. L.MACROS_PAGE_NO_CONDITIONS .. "|r" end
+  return table.concat(parts, "\n")
+end
+
+refreshPage = function(holder)
+  if not holder.list then return end
+  local L = HK.L
+  if state.dirty then reload() end
+  local macros = state.macros
+  local bad = 0
+  for _, macro in ipairs(macros) do if (macro.problems or 0) > 0 then bad = bad + 1 end end
+  holder.summary:SetText(L.MACROS_SUMMARY:format(#macros, bad))
+  holder.list:SetItems(macros)
+  local macro = macros[state.selected]
+  if not macro then
+    holder.detail:Hide()
+    holder.list:SetShown(#macros > 0)
+    holder.empty:SetText(#macros == 0 and L.MACROS_NONE or L.MACROS_PICK)
+    holder.empty:Show()
+    return
+  end
+  holder.empty:SetText("")
+  holder.empty:Hide()
+  holder.list:Show()
+  holder.detail:Show()
+  local result = macro.result or { length = #macro.body, problems = {}, lines = {} }
+  setIcon(holder.icon, macro.icon)
+  holder.name:SetText(plain(macro.name))
+  holder.scope:SetText(macro.scope == "character" and L.MACROS_CHARACTER or L.MACROS_ACCOUNT)
+  local long = result.length > Macros.MAX_LENGTH
+  holder.length:SetText(L.MACROS_LENGTH:format(result.length, Macros.MAX_LENGTH))
+  UI.SetTextColorKey(holder.length, long and "bad" or "muted")
+  holder.lengthBar:SetValue(result.length / Macros.MAX_LENGTH)
+  holder.lengthBar:SetColorKey(long and "bad" or (result.length > Macros.MAX_LENGTH * 0.9 and "warn" or "good"))
+  holder.body:SetText(macro.body ~= "" and plain(macro.body) or "")
+
+  local anchor = holder.bodyBox
+  local problems = result.problems or {}
+  holder.ok:ClearAllPoints()
+  if #problems == 0 then
+    holder.ok:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -8)
+    holder.ok:SetText(L.MACROS_OK)
+    holder.ok:Show()
+    anchor = holder.ok
+  else
+    holder.ok:Hide()
+  end
+  for i, row in ipairs(holder.problemRows) do
+    local problem = problems[i]
+    if problem then
+      local text = Macros.DescribeProblem(problem)
+      if i == MAX_PROBLEM_ROWS and #problems > MAX_PROBLEM_ROWS then
+        text = text .. " " .. L.MACROS_PAGE_MORE:format(#problems - MAX_PROBLEM_ROWS)
+      end
+      row:ClearAllPoints()
+      row:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, i == 1 and -8 or -4)
+      row.text:SetText(plain(text))
+      row:Show()
+      anchor = row
+    else
+      row:Hide()
+    end
+  end
+  holder.condTitle:ClearAllPoints()
+  holder.condTitle:SetPoint("TOPLEFT", anchor, "BOTTOMLEFT", 0, -10)
+  holder.condTitle:SetText(L.MACROS_CONDITIONS)
+  holder.conditions:ClearAllPoints()
+  holder.conditions:SetPoint("TOPLEFT", holder.condTitle, "BOTTOMLEFT", 0, -4)
+  holder.conditions:SetPoint("BOTTOMRIGHT", holder.detail, "BOTTOMRIGHT", -10, 8)
+  holder.conditions:SetText(explanationText(result))
+end
+
+Macros.Page = { build = buildPage, refresh = function(holder) refreshPage(holder) end }
+
+function Macros.PageHolder() return pageHolder end
+
+-- Opens the Macros page of the Hearthkeep window, reading the macros again.
 function Macros.Open()
-  if not frame then
-    if inCombat() then
-      print("Hearthkeep: " .. HK.L.MACROS_COMBAT)
-      return false
-    end
-    local ok, created = pcall(create)
-    if not ok then
-      HK.Diag.Record(NAME, "create", created)
-      return false
-    end
-    frame = created
-  end
-  reload()
-  frame:Show()
-  Macros.Refresh()
-  return true
+  if not HK:IsModuleEnabled(NAME) then HK:EnableModule(NAME) end
+  state.dirty = true
+  if not HK.Home then return false end
+  return HK.Home.Open(NAME)
 end
-
-function Macros.Hide()
-  if frame then frame:Hide() end
-end
-
-function Macros.Toggle()
-  if frame and frame:IsShown() then
-    Macros.Hide()
-    return false
-  end
-  return Macros.Open()
-end
-
-function Macros.Frame() return frame end
 
 local function registerEvents()
   if eventsRegistered then return end
   eventsRegistered = true
   local ok, err = pcall(HK.RegisterEvent, HK, "UPDATE_MACROS", function()
-    if frame and frame:IsShown() then
-      reload()
-      Macros.Refresh()
-    end
+    state.dirty = true
+    changed()
   end, NAME)
   if not ok then HK.Diag.Record(NAME, "RegisterEvent UPDATE_MACROS", err) end
 end
@@ -641,12 +720,14 @@ Macros.Module = HK:RegisterModule(NAME, {
   group = "utilities", title = "MOD_MACROS", desc = "MOD_MACROS_DESC", command = "macros",
   default = false,
   presets = { minimal = false, recommended = true },
-  Open = function() Macros.Toggle() end,
-  OnEnable = function() registerEvents() end,
-  OnDisable = function() Macros.Hide() end,
+  section = "tools",
+  Card = function() return Macros.Card() end,
+  Page = Macros.Page,
+  Open = function() Macros.Open() end,
+  OnEnable = function()
+    state.dirty = true
+    registerEvents()
+  end,
 })
 
-HK:RegisterCommand("macros", function()
-  if not HK:IsModuleEnabled(NAME) then HK:EnableModule(NAME) end
-  Macros.Toggle()
-end, "macros - check your macros")
+HK:RegisterCommand("macros", function() Macros.Open() end, "macros - check your macros")
