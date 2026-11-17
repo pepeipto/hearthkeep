@@ -1,0 +1,10 @@
+-- Writes scripts/packs.json. Run from the repo root: luajit scripts/gen-packs.lua
+local Stub = dofile("tests/wowstub.lua")
+Stub.snapshotGlobals()
+Stub.reset()
+local HK = Stub.load("Hearthkeep")
+local build = dofile("scripts/packs-json.lua")
+local out = assert(io.open("scripts/packs.json", "w"))
+out:write(build(HK.Manifest, dofile("scripts/pack-sources.lua")))
+out:close()
+print("wrote scripts/packs.json")

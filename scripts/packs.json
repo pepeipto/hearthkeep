@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "own": ["Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses"],
+  "modes": [
+    { "id": "raid", "addons": [
+        { "folder": "DBM-Core", "name": "Deadly Boss Mods", "role": "core", "github": "DeadlyBossMods/DeadlyBossMods" },
+        { "folder": "BigWigs", "name": "BigWigs", "role": "optional", "github": "BigWigsMods/BigWigs" },
+        { "folder": "Details", "name": "Details! Damage Meter", "role": "core", "github": "Tercioo/Details-Damage-Meter" }
+    ] },
+    { "id": "dungeons", "addons": [
+        { "folder": "DBM-Core", "name": "Deadly Boss Mods", "role": "core", "github": "DeadlyBossMods/DeadlyBossMods" },
+        { "folder": "Details", "name": "Details! Damage Meter", "role": "core", "github": "Tercioo/Details-Damage-Meter" },
+        { "folder": "RaiderIO", "name": "Raider.IO", "role": "core", "github": null },
+        { "folder": "AtlasLootClassic", "name": "AtlasLoot Classic", "role": "optional", "github": null }
+    ] },
+    { "id": "pvp", "addons": [
+        { "folder": "BattlegroundTargets", "name": "BattlegroundTargets", "role": "core", "github": null },
+        { "folder": "Spy", "name": "Spy", "role": "core", "github": null }
+    ] },
+    { "id": "quests", "addons": [
+        { "folder": "Questie", "name": "Questie", "role": "core", "github": "Questie/Questie" },
+        { "folder": "QuestieDB", "name": "QuestieDB", "role": "core", "github": "Questie/QuestieDB" },
+        { "folder": "TomTom", "name": "TomTom", "role": "core", "github": null },
+        { "folder": "Leatrix_Maps", "name": "Leatrix Maps", "role": "core", "github": null }
+    ] },
+    { "id": "world", "addons": [
+        { "folder": "RareScanner", "name": "RareScanner", "role": "core", "github": null },
+        { "folder": "Leatrix_Maps", "name": "Leatrix Maps", "role": "core", "github": null },
+        { "folder": "OpenMap", "name": "OpenMap", "role": "core", "github": null }
+    ] }
+  ]
+}
