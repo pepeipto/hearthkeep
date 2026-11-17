@@ -238,7 +238,7 @@ test("the four modules are combat modules, off by default, with presets and comm
     falsy(HK:IsModuleEnabled(name), name)
   end
   for _, frame in ipairs(Stub.frames) do
-    falsy(frame.name and frame.name:find("^Hearthkeep%u%l+Frame$"), "a window exists before Open")
+    falsy(rawget(frame, "name") and rawget(frame, "name"):find("^Hearthkeep%u%l+Frame$"), "a window exists before Open")
   end
 end)
 

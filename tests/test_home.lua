@@ -6,6 +6,26 @@ local function boot()
   return HK
 end
 
+-- Hides the modules shipped in the TOC (and their presets) so a test only sees the
+-- modules it registers itself.
+local function isolate(HK)
+  local shipped = {}
+  for _, name in ipairs(HK:ModuleNames()) do
+    shipped[name] = true
+    local def = HK:ModuleInfo(name)
+    if def then def.presets = nil end
+  end
+  local all = HK.ModuleNames
+  HK.ModuleNames = function(self)
+    local list = {}
+    for _, name in ipairs(all(self)) do
+      if not shipped[name] then list[#list + 1] = name end
+    end
+    return list
+  end
+  return HK
+end
+
 test("a module with default=false starts off; one without a default starts on", function()
   local HK = boot()
   local started = 0
@@ -38,7 +58,7 @@ test("a module registered after login with default=false stays off", function()
 end)
 
 test("ApplyPreset switches only modules that declare presets", function()
-  local HK = boot()
+  local HK = isolate(boot())
   HK:RegisterModule("A", { default = false, presets = { minimal = false, recommended = true } })
   HK:RegisterModule("B", { presets = { minimal = true, recommended = true } })
   HK:RegisterModule("C", {})
@@ -85,7 +105,7 @@ test("storage keeps module data across a reload and drops wrong types", function
 end)
 
 test("Home.Pages groups modules in group order with titles and commands", function()
-  local HK = boot()
+  local HK = isolate(boot())
   HK.Locale.Register("enUS", { T_B = "Bags", T_X = "XP", T_J = "Journal" })
   HK:RegisterModule("X", { group = "qol", title = "T_X", command = "xp", default = false })
   HK:RegisterModule("B", { group = "qol", title = "T_B", Open = function() end })
@@ -105,7 +125,7 @@ test("Home.Pages groups modules in group order with titles and commands", functi
 end)
 
 test("Home.ListRows puts a header before each group", function()
-  local HK = boot()
+  local HK = isolate(boot())
   HK:RegisterModule("X", { group = "qol" })
   HK:RegisterModule("J", { group = "adventure" })
   local rows = HK.Home.ListRows()
