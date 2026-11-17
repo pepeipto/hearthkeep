@@ -94,7 +94,7 @@ end
 -- fallback: optional { point, relativePoint, x, y } used until the player moves it.
 function HUD.Create(name, width, height, fallback)
   if frames[name] then return frames[name] end
-  local frame = CreateFrame("Frame", "HearthkeepHUD" .. name, UIParent, "BackdropTemplate")
+  local frame = HK.UI.Panel(UIParent, "window", "border", "HearthkeepHUD" .. name)
   frame:SetSize(width, height)
   frame:SetMovable(true)
   frame:SetClampedToScreen(true)
@@ -116,7 +116,6 @@ function HUD.Create(name, width, height, fallback)
   wrapVisibility(frame)
   place(frame, name, fallback)
   applyLock(frame)
-  HK.Skins.Track(frame, "window")
   frames[name] = frame
   return frame
 end
