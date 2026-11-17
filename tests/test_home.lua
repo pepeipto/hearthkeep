@@ -92,35 +92,89 @@ local function entryOf(page, name)
   for _, entry in ipairs(page.modules) do if entry.name == name then return entry end end
 end
 
-test("Home.Pages groups modules in group order with titles and commands", function()
+test("Home.Pages groups modules by section in sidebar order", function()
   local HK = boot()
-  HK.Locale.Register("enUS", { T_B = "Aaa bags", T_X = "Aab xp" })
-  HK:RegisterModule("X", { group = "qol", title = "T_X", command = "xp", default = false })
-  HK:RegisterModule("B", { group = "qol", title = "T_B", Open = function() end })
+  HK.Locale.Register("enUS", { T_X = "Xp thing" })
+  HK:RegisterModule("XP", { title = "T_X", command = "xp", default = false })
   HK:RegisterModule("Plain", {})
+  HK:RegisterModule("Placed", { section = "bags", Open = function() end })
   Stub.fire("PLAYER_LOGIN")
   local pages = HK.Home.Pages()
   local order = {}
   for i, page in ipairs(pages) do order[page.group] = i end
-  truthy(order.adventure < order.qol and order.qol < order.suite)
-  local qol = pageOf(pages, "qol")
-  eq(qol.modules[1].name, "B")
-  eq(qol.modules[1].canOpen, true)
-  eq(qol.modules[2].command, "/hk xp")
-  eq(qol.modules[2].enabled, false)
-  eq(entryOf(pageOf(pages, "suite"), "Plain").title, "Plain")
+  truthy(order.progress < order.bags and order.bags < order.tools)
+  local xp = entryOf(pageOf(pages, "progress"), "XP")
+  eq(xp.title, "Xp thing")
+  eq(xp.command, "/hk xp")
+  eq(xp.enabled, false)
+  eq(entryOf(pageOf(pages, "tools"), "Plain").title, "Plain")
+  eq(entryOf(pageOf(pages, "bags"), "Placed").canOpen, true)
 end)
 
-test("Home.ListRows puts a header before each group", function()
+test("Home.Sections always shows home and settings and counts enabled modules", function()
   local HK = boot()
-  local rows = HK.Home.ListRows()
-  truthy(rows[1].header)
-  local headers, modules = 0, 0
-  for _, row in ipairs(rows) do
-    if row.header then headers = headers + 1 else modules = modules + 1 end
+  Stub.fire("PLAYER_LOGIN")
+  local sections = HK.Home.Sections()
+  eq(sections[1].key, "home")
+  eq(sections[#sections].key, "settings")
+  for _, s in ipairs(sections) do
+    local on = 0
+    for _, name in ipairs(s.modules) do if HK:IsModuleEnabled(name) then on = on + 1 end end
+    eq(s.enabled, on)
   end
-  eq(headers, #HK.Home.Pages())
-  eq(modules, #HK:ModuleNames())
+end)
+
+test("Home.Cards collects cards from enabled modules, alerts first, errors recorded", function()
+  local HK = boot()
+  HK:RegisterModule("CA", { Card = function() return { title = "A", value = "1", order = 20 } end })
+  HK:RegisterModule("CB", { Card = function() return { { title = "B", value = "2", order = 10 },
+    { title = "C", value = "3", alert = true } } end })
+  HK:RegisterModule("COff", { default = false, Card = function() return { title = "Off" } end })
+  HK:RegisterModule("CErr", { Card = function() error("boom") end })
+  Stub.fire("PLAYER_LOGIN")
+  local titles = {}
+  for _, card in ipairs(HK.Home.Cards()) do titles[#titles + 1] = card.title end
+  eq(titles[1], "C")
+  local seen = {}
+  for _, t in ipairs(titles) do seen[t] = true end
+  truthy(seen.A and seen.B)
+  falsy(seen.Off)
+  truthy(HK.Diag.Last("CErr"))
+end)
+
+test("the home window shows the dashboard, a module page and settings without errors", function()
+  local HK = boot()
+  local built, refreshed = 0, 0
+  HK:RegisterModule("Paged", { section = "bags", Card = function() return { title = "P", value = "v", progress = 0.5 } end,
+    Page = { build = function(holder, w, h) built = built + 1 truthy(w > 0 and h > 0) end,
+      refresh = function() refreshed = refreshed + 1 end } })
+  Stub.fire("PLAYER_LOGIN")
+  truthy(HK.Home.Open())
+  eq(HK.Home.section, "home")
+  truthy(HK.Home.Select("Paged"))
+  eq(HK.Home.section, "bags")
+  eq(built, 1)
+  truthy(refreshed >= 1)
+  truthy(HK.Home.SelectSection("settings"))
+  truthy(HK.Home.SelectSection("home"))
+  falsy(HK.Home.SelectSection("nope"))
+  eq(HK.Diag.Last("Home"), nil)
+  eq(HK.Diag.Last("Paged"), nil)
+end)
+
+test("a page is built once and only while its module is on", function()
+  local HK = boot()
+  local built = 0
+  HK:RegisterModule("Paged", { section = "bags", default = false,
+    Page = { build = function() built = built + 1 end } })
+  Stub.fire("PLAYER_LOGIN")
+  HK.Home.Open("Paged")
+  eq(built, 0)
+  eq(HK.Home.ToggleSelected(), true)
+  eq(built, 1)
+  HK.Home.SelectSection("home")
+  HK.Home.Select("Paged")
+  eq(built, 1)
 end)
 
 test("Home toggles the selected module and opens it (turning it on first)", function()
@@ -227,40 +281,4 @@ test("/hk hud shows every HUD frame of an enabled module and restores it on lock
   eq(told, { true, false })
   xp:Show()
   truthy(xp:IsShown())
-end)
-
-test("the home list scrolls with the mouse wheel and every row can be reached", function()
-  local HK = boot()
-  for i = 1, 40 do HK:RegisterModule(("Mod%02d"):format(i), { group = "qol" }) end
-  Stub.fire("PLAYER_LOGIN")
-  truthy(HK.Home.Open())
-  local rows = HK.Home.ListRows()
-  truthy(#rows > HK.Home.LIST_ROWS)
-  local frame = HK.Home.frame
-  local wheel = frame.scripts.OnMouseWheel
-  truthy(wheel, "no mouse wheel script")
-  wheel(frame, 1)
-  eq(HK.Home.offset, 0)
-  local seen = {}
-  for _ = 1, #rows do
-    for i, row in ipairs(HK.Home.VisibleRows()) do seen[HK.Home.offset + i] = row.text end
-    wheel(frame, -1)
-  end
-  eq(HK.Home.MaxOffset(), #rows - HK.Home.LIST_ROWS)
-  eq(HK.Home.offset, HK.Home.MaxOffset())
-  for i = 1, #rows do eq(seen[i], rows[i].text) end
-  eq(HK.Home.Scroll(1000), HK.Home.MaxOffset())
-  eq(HK.Home.Scroll(-1000), 0)
-end)
-
-test("opening the home window on a module scrolls its row into view", function()
-  local HK = boot()
-  for i = 1, 40 do HK:RegisterModule(("Mod%02d"):format(i), { group = "qol" }) end
-  Stub.fire("PLAYER_LOGIN")
-  HK.Home.Open("Mod40")
-  local found = false
-  for _, row in ipairs(HK.Home.VisibleRows()) do
-    if row.name == "Mod40" then found = true end
-  end
-  truthy(found, "Mod40 not visible")
 end)

@@ -114,6 +114,7 @@ function Skins.SetActive(name)
   if not known then return false end
   HK.db.settings.skin = name
   for frame, role in pairs(tracked) do Skins.Apply(frame, role) end
+  if HK.UI then pcall(HK.UI.Repaint) end
   return true
 end
 

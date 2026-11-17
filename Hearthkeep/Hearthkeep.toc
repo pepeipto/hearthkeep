@@ -15,6 +15,7 @@ Manifest.lua
 Skins.lua
 Version.lua
 Options.lua
+UI.lua
 HUD.lua
 Home.lua
 Setup.lua
