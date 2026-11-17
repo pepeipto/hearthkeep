@@ -46,3 +46,9 @@ Modules\Adventure\Locale.lua
 Modules\Adventure\Training.lua
 Modules\Adventure\Professions.lua
 Modules\Adventure\Waypoint.lua
+Modules\Gear\Locale.lua
+Modules\Gear\Score.lua
+Modules\Gear\Gear.lua
+Modules\Gear\Sets.lua
+Modules\Gear\Wishlist.lua
+Modules\Gear\Group.lua
