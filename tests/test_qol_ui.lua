@@ -301,7 +301,7 @@ test("XP, Bags and Loot can hide their on-screen box", function()
   HK.ModuleDB("XP").hud = true
   mod(HK, "XP").Refresh()
   truthy(HK.HUD.Get("XP"):IsShown())
-  truthy(HK.HUD.Get("XP").hkBar)
+  truthy(rawget(HK.HUD.Get("XP"), "hkBar"))
 end)
 
 -- Pages --------------------------------------------------------------------------------
@@ -385,8 +385,9 @@ test("the page switches change the saved settings", function()
   -- Find every toggle the QoL pages registered and flip it twice.
   local flipped = 0
   for _, frame in ipairs(Stub.frames) do
-    if frame.hkSettings then
-      for _, row in ipairs(frame.hkSettings) do
+    local rows = rawget(frame, "hkSettings")
+    if type(rows) == "table" then
+      for _, row in ipairs(rows) do
         local before = row.get()
         row.toggle.scripts.OnClick(row.toggle)
         eq(row.get(), not before)

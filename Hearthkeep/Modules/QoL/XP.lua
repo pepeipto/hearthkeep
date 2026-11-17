@@ -156,7 +156,8 @@ function XP.Refresh()
       local stats = XP.Stats(XP.state, now(), game)
       QoL.SetLines(frame, XP.Lines(stats))
       QoL.LineColor(frame, 1, "gold")
-      if frame.hkBar then frame.hkBar:SetValue(stats.percent / 100) end
+      local bar = rawget(frame, "hkBar")
+      if bar then bar:SetValue(stats.percent / 100) end
       frame:Show()
     end
   end

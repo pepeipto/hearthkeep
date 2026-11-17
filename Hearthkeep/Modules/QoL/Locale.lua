@@ -433,8 +433,12 @@ local Page = {}
 QoL.Page = Page
 
 function Page.Label(holder, fs, key)
-  holder.hkLabels = holder.hkLabels or {}
-  holder.hkLabels[#holder.hkLabels + 1] = { fs = fs, key = key }
+  local list = rawget(holder, "hkLabels")
+  if type(list) ~= "table" then
+    list = {}
+    holder.hkLabels = list
+  end
+  list[#list + 1] = { fs = fs, key = key }
   return fs
 end
 
@@ -491,8 +495,12 @@ function Page.Setting(holder, parent, width, labelKey, helpKey, get, set)
     Page.Label(holder, row.help, helpKey)
   end
   row.get = get
-  holder.hkSettings = holder.hkSettings or {}
-  holder.hkSettings[#holder.hkSettings + 1] = row
+  local rows = rawget(holder, "hkSettings")
+  if type(rows) ~= "table" then
+    rows = {}
+    holder.hkSettings = rows
+  end
+  rows[#rows + 1] = row
   return row
 end
 
@@ -520,8 +528,8 @@ end
 
 -- Paints the registered labels and the switches. Call first in every page refresh.
 function Page.Paint(holder)
-  for _, entry in ipairs(holder.hkLabels or {}) do entry.fs:SetText(HK.L[entry.key]) end
-  for _, row in ipairs(holder.hkSettings or {}) do row.toggle:SetState(row.get()) end
+  for _, entry in ipairs(rawget(holder, "hkLabels") or {}) do entry.fs:SetText(HK.L[entry.key]) end
+  for _, row in ipairs(rawget(holder, "hkSettings") or {}) do row.toggle:SetState(row.get()) end
 end
 
 local ICON_PATH = "Interface\\Icons\\"
