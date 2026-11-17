@@ -8,10 +8,17 @@ local function boot(language)
   return HK
 end
 
+-- The stub has no profession or spell APIs, so the Alts login snapshot records those
+-- reads; everything else (page, card, UI kit, window) must stay clean.
+local CAPTURE_FIELDS = { professions = true, cooldowns = true }
+
 local function noErrors(HK, name)
   for _, m in ipairs({ name, "Home", "UI" }) do
-    local e = HK.Diag.Last(m)[1]
-    eq(e and (m .. " " .. e.field .. ": " .. e.err), nil)
+    for _, e in ipairs(HK.Diag.Last(m)) do
+      if not (m == "Alts" and CAPTURE_FIELDS[e.field]) then
+        eq(m .. " " .. e.field .. ": " .. e.err, nil)
+      end
+    end
   end
   eq(#Stub.errors, 0)
 end

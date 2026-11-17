@@ -102,10 +102,17 @@ local function openPage(HK, Alts)
   return holder
 end
 
+-- The stub has no profession or spell APIs, so the login snapshot records those reads;
+-- everything else (page, card, UI kit, window) must stay clean.
+local CAPTURE_FIELDS = { professions = true, cooldowns = true }
+
 local function noErrors(HK)
   for _, m in ipairs({ "Alts", "Home", "UI" }) do
-    local e = HK.Diag.Last(m)[1]
-    eq(e and (m .. " " .. e.field .. ": " .. e.err), nil)
+    for _, e in ipairs(HK.Diag.Last(m)) do
+      if not (m == "Alts" and CAPTURE_FIELDS[e.field]) then
+        eq(m .. " " .. e.field .. ": " .. e.err, nil)
+      end
+    end
   end
 end
 
