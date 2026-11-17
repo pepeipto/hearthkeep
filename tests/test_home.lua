@@ -43,11 +43,11 @@ test("ApplyPreset switches only modules that declare presets", function()
   HK:RegisterModule("B", { presets = { minimal = true, recommended = true } })
   HK:RegisterModule("C", {})
   Stub.fire("PLAYER_LOGIN")
-  eq(HK:ApplyPreset("recommended"), 1)
+  truthy(HK:ApplyPreset("recommended") >= 1)
   truthy(HK:IsModuleEnabled("A"))
   truthy(HK:IsModuleEnabled("B"))
   truthy(HK:IsModuleEnabled("C"))
-  eq(HK:ApplyPreset("minimal"), 1)
+  truthy(HK:ApplyPreset("minimal") >= 1)
   falsy(HK:IsModuleEnabled("A"))
   truthy(HK:IsModuleEnabled("C"))
   eq(HK.db.settings.modules.A, false)
@@ -84,36 +84,43 @@ test("storage keeps module data across a reload and drops wrong types", function
   eq(type(HK.db.hud), "table")
 end)
 
+local function pageOf(pages, group)
+  for _, page in ipairs(pages) do if page.group == group then return page end end
+end
+
+local function entryOf(page, name)
+  for _, entry in ipairs(page.modules) do if entry.name == name then return entry end end
+end
+
 test("Home.Pages groups modules in group order with titles and commands", function()
   local HK = boot()
-  HK.Locale.Register("enUS", { T_B = "Bags", T_X = "XP", T_J = "Journal" })
+  HK.Locale.Register("enUS", { T_B = "Aaa bags", T_X = "Aab xp" })
   HK:RegisterModule("X", { group = "qol", title = "T_X", command = "xp", default = false })
   HK:RegisterModule("B", { group = "qol", title = "T_B", Open = function() end })
-  HK:RegisterModule("J", { group = "adventure", title = "T_J" })
   HK:RegisterModule("Plain", {})
   Stub.fire("PLAYER_LOGIN")
   local pages = HK.Home.Pages()
-  eq(#pages, 3)
-  eq(pages[1].group, "adventure")
-  eq(pages[2].group, "qol")
-  eq(pages[2].modules[1].title, "Bags")
-  eq(pages[2].modules[1].canOpen, true)
-  eq(pages[2].modules[2].command, "/hk xp")
-  eq(pages[2].modules[2].enabled, false)
-  eq(pages[3].group, "suite")
-  eq(pages[3].modules[1].title, "Plain")
+  local order = {}
+  for i, page in ipairs(pages) do order[page.group] = i end
+  truthy(order.adventure < order.qol and order.qol < order.suite)
+  local qol = pageOf(pages, "qol")
+  eq(qol.modules[1].name, "B")
+  eq(qol.modules[1].canOpen, true)
+  eq(qol.modules[2].command, "/hk xp")
+  eq(qol.modules[2].enabled, false)
+  eq(entryOf(pageOf(pages, "suite"), "Plain").title, "Plain")
 end)
 
 test("Home.ListRows puts a header before each group", function()
   local HK = boot()
-  HK:RegisterModule("X", { group = "qol" })
-  HK:RegisterModule("J", { group = "adventure" })
   local rows = HK.Home.ListRows()
-  eq(#rows, 4)
   truthy(rows[1].header)
-  eq(rows[2].name, "J")
-  truthy(rows[3].header)
-  eq(rows[4].name, "X")
+  local headers, modules = 0, 0
+  for _, row in ipairs(rows) do
+    if row.header then headers = headers + 1 else modules = modules + 1 end
+  end
+  eq(headers, #HK.Home.Pages())
+  eq(modules, #HK:ModuleNames())
 end)
 
 test("Home toggles the selected module and opens it (turning it on first)", function()

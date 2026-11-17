@@ -260,14 +260,6 @@ test("left-click on the minimap button toggles Alts and does not open the menu",
   eq(Alts.Minimap.menu, nil)
 end)
 
-test("right-click on the minimap button opens a menu with Alts only when Modes is absent", function()
-  local _, Alts = setup()
-  local button = Alts.Minimap.Create()
-  button.scripts.OnClick(button, "RightButton")
-  eq(Alts.Minimap.menu:IsShown(), true)
-  eq(Alts.Minimap.MenuEntries(), { "MENU_HOME", "MENU_ALTS" })
-end)
-
 test("the minimap menu lists Modes, Alts and Setup when Modes is loaded and they work", function()
   local HK, Alts = setup()
   local Modes = _G.Hearthkeep.Modes

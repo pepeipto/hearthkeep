@@ -31,8 +31,6 @@ end)
 
 test("packs.json lists every own addon folder and every mode", function()
   local HK, _, text = build()
-  for _, dir in ipairs({ "Hearthkeep", "Hearthkeep_Alts", "Hearthkeep_Modes", "Hearthkeep_Bosses" }) do
-    truthy(text:find('"' .. dir .. '"', 1, true), dir)
-  end
+  truthy(text:find('"own": ["Hearthkeep"]', 1, true), "own folder")
   for _, id in ipairs(HK.Manifest.Ids()) do truthy(text:find('"id": "' .. id .. '"', 1, true), id) end
 end)

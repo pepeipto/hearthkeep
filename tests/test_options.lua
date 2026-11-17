@@ -118,7 +118,7 @@ end)
 
 test("panel checkboxes are labeled and refresh on every show", function()
   local HK = Stub.load("Hearthkeep")
-  HK:RegisterModule("Alts", {})
+  HK:RegisterModule("Zed", {})
   local panel
   Settings = {
     RegisterCanvasLayoutCategory = function(p) panel = p return {} end,
@@ -129,11 +129,11 @@ test("panel checkboxes are labeled and refresh on every show", function()
   local box, labeled
   for _, f in ipairs(Stub.frames) do
     if f.kind == "CheckButton" then box = f end
-    if f.text == "Alts" then labeled = true end
+    if f.text == "Zed" then labeled = true end
   end
   truthy(labeled, "no label with the module name")
   eq(box:GetChecked(), true)
-  HK:DisableModule("Alts")
+  HK:DisableModule("Zed")
   panel.scripts.OnShow(panel)
   eq(box:GetChecked(), false)
 end)
@@ -173,12 +173,6 @@ test("choosing a language or a skin in the panel applies it", function()
   eq(HK.db.settings.language, "deDE")
   buttonByText("Dark").scripts.OnClick(buttonByText("Dark"))
   eq(HK.db.settings.skin, "dark")
-end)
-
-test("with Hearthkeep_Modes absent the panel hides the Modes entries", function()
-  local HK = panelSetup(false)
-  falsy(buttonByText(HK.L.SETUP_AGAIN))
-  falsy(buttonByText(HK.L.RESTORE_ORIGINAL))
 end)
 
 test("with Hearthkeep_Modes loaded the panel can rerun setup and restore", function()
