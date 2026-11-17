@@ -56,7 +56,9 @@ Macros.CONDITIONS = {
   group = "player", channeling = "player", button = "player", flying = "player",
   swimming = "player", indoors = "player", outdoors = "player", flyable = "player",
   resting = "player", pet = "player", equipped = "player", known = "player",
-  cursor = "player", actionbar = "player",
+  cursor = "player", actionbar = "player", bonusbar = "player", possessbar = "player",
+  spec = "player",
+  -- Not offered: petbattle and vehicleui do not exist in Classic.
 }
 Macros.ALIASES = {
   modifier = "mod", btn = "button", stance = "form", worn = "equipped", bar = "actionbar",

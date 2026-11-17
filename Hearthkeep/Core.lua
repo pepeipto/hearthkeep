@@ -45,7 +45,9 @@ function HK:RegisterModule(name, module)
     if HK.Diag then HK.Diag.Record("Core", "RegisterModule", "duplicate module " .. tostring(name)) end
     return modules[name].def
   end
-  modules[name] = { def = module, enabled = true, started = false }
+  -- Off until PLAYER_LOGIN decides from the saved switch or the default, so the module's
+  -- event handlers do not run before login.
+  modules[name] = { def = module, enabled = false, started = false }
   order[#order + 1] = name
   if HK.loggedIn then
     modules[name].enabled = setting(name)

@@ -52,7 +52,12 @@ register("enUS", {
   BUFFS_CHECK_RESTED = "rested",
   BUFFS_CHECK_INSTANCES = "only in instances",
   BUFFS_STATUS = "buffs: %s.",
-  BUFFS_HELP = "/hk buffs food|flask|rested|instances - turn a check on or off",
+  BUFFS_HELP = "/hk buffs food|flask|rested|instances - turn a check on or off; /hk buffs learn - count the buffs you have now as flask/elixir; /hk buffs forget - clear that list",
+  BUFFS_LEARN_HINT = "Flask or elixir not recognised? Drink it and type /hk buffs learn.",
+  BUFFS_LEARNED = "these buffs now count as flask/elixir: %s.",
+  BUFFS_LEARNED_NONE = "no new buffs to learn: drink your flask or elixir first, then type /hk buffs learn.",
+  BUFFS_FORGOTTEN = "learned flask/elixir buffs cleared.",
+  BUFFS_LEARNED_COUNT = "learned %d",
 
   MACROS_TITLE = "Macros",
   MACROS_NONE = "You have no macros.",
@@ -71,7 +76,7 @@ register("enUS", {
   MAC_P_LENGTH = "The macro is %d characters long, but the game only keeps %d. The end will be cut off.",
   MAC_P_UNKNOWN_COMMAND = "Line %d: %s is not a command Hearthkeep knows. It may be a typo, or a command from an addon that is not loaded.",
   MAC_P_UNBALANCED = "Line %d: the square brackets [ ] do not match, so the conditions on this line will not work.",
-  MAC_P_UNKNOWN_CONDITION = "Line %d: \"%s\" is not a condition the game knows, so that block will not work as you expect.",
+  MAC_P_UNKNOWN_CONDITION = "Line %d: Hearthkeep does not recognise the condition \"%s\"; check its spelling, that block may not work as you expect.",
   MAC_P_NO_SLASH = "Line %d does not start with / or #, so it will be sent to chat as text.",
   MAC_P_EMPTY_COMMAND = "Line %d has a / with no command after it.",
 
@@ -128,6 +133,9 @@ register("enUS", {
   known = { "you know the spell", "you do not know the spell", "you know %s", "you do not know %s" },
   cursor = { "you hold something on the cursor", "your cursor is empty" },
   actionbar = { "a specific action bar is active", "another action bar is active", "action bar %s is active", "action bar %s is not active" },
+  bonusbar = { "a bonus action bar is active (stance, form or stealth bar)", "no bonus action bar is active", "bonus bar %s is active", "bonus bar %s is not active" },
+  possessbar = { "you control a possessed creature's action bar", "you do not have a possess action bar" },
+  spec = { "a specific talent specialization is active", "another talent specialization is active", "talent specialization %s is active", "talent specialization %s is not active" },
 })
 
 register("esES", {
@@ -156,7 +164,12 @@ register("esES", {
   BUFFS_CHECK_RESTED = "descanso",
   BUFFS_CHECK_INSTANCES = "solo en mazmorras y bandas",
   BUFFS_STATUS = "bufos: %s.",
-  BUFFS_HELP = "/hk buffs food|flask|rested|instances - activa o desactiva una comprobación",
+  BUFFS_HELP = "/hk buffs food|flask|rested|instances - activa o desactiva una comprobación; /hk buffs learn - cuenta los bufos que tienes ahora como frasco/elixir; /hk buffs forget - borra esa lista",
+  BUFFS_LEARN_HINT = "¿No reconoce tu frasco o elixir? Tómalo y escribe /hk buffs learn.",
+  BUFFS_LEARNED = "estos bufos cuentan ahora como frasco/elixir: %s.",
+  BUFFS_LEARNED_NONE = "no hay bufos nuevos que aprender: tómate primero el frasco o elixir y escribe /hk buffs learn.",
+  BUFFS_FORGOTTEN = "bufos aprendidos de frasco/elixir borrados.",
+  BUFFS_LEARNED_COUNT = "aprendidos %d",
 
   MACROS_TITLE = "Macros",
   MACROS_NONE = "No tienes macros.",
@@ -175,7 +188,7 @@ register("esES", {
   MAC_P_LENGTH = "La macro tiene %d caracteres, pero el juego solo guarda %d. Se cortará el final.",
   MAC_P_UNKNOWN_COMMAND = "Línea %d: %s no es un comando que Hearthkeep conozca. Puede ser una errata o un comando de un addon que no está cargado.",
   MAC_P_UNBALANCED = "Línea %d: los corchetes [ ] no cuadran, así que las condiciones de esta línea no funcionarán.",
-  MAC_P_UNKNOWN_CONDITION = "Línea %d: \"%s\" no es una condición que el juego conozca, así que ese bloque no funcionará como esperas.",
+  MAC_P_UNKNOWN_CONDITION = "Línea %d: Hearthkeep no reconoce la condición \"%s\"; revisa cómo está escrita, puede que ese bloque no funcione como esperas.",
   MAC_P_NO_SLASH = "La línea %d no empieza por / ni por #, así que se enviará al chat como texto.",
   MAC_P_EMPTY_COMMAND = "La línea %d tiene una / sin comando detrás.",
 
@@ -232,6 +245,9 @@ register("esES", {
   known = { "conoces el hechizo", "no conoces el hechizo", "conoces %s", "no conoces %s" },
   cursor = { "llevas algo en el cursor", "no llevas nada en el cursor" },
   actionbar = { "está activa una barra de acción concreta", "está activa otra barra de acción", "está activa la barra de acción %s", "no está activa la barra de acción %s" },
+  bonusbar = { "está activa una barra de acción adicional (de actitud, forma o sigilo)", "no está activa ninguna barra de acción adicional", "está activa la barra adicional %s", "no está activa la barra adicional %s" },
+  possessbar = { "controlas la barra de acción de una criatura poseída", "no tienes barra de posesión" },
+  spec = { "está activa una especialización de talentos concreta", "está activa otra especialización de talentos", "está activa la especialización de talentos %s", "no está activa la especialización de talentos %s" },
 })
 
 register("deDE", {
@@ -260,7 +276,12 @@ register("deDE", {
   BUFFS_CHECK_RESTED = "Erholung",
   BUFFS_CHECK_INSTANCES = "nur in Instanzen",
   BUFFS_STATUS = "Buffs: %s.",
-  BUFFS_HELP = "/hk buffs food|flask|rested|instances - eine Prüfung ein- oder ausschalten",
+  BUFFS_HELP = "/hk buffs food|flask|rested|instances - eine Prüfung ein- oder ausschalten; /hk buffs learn - deine aktuellen Buffs als Fläschchen/Elixier zählen; /hk buffs forget - diese Liste leeren",
+  BUFFS_LEARN_HINT = "Fläschchen oder Elixier nicht erkannt? Trink es und gib /hk buffs learn ein.",
+  BUFFS_LEARNED = "diese Buffs zählen jetzt als Fläschchen/Elixier: %s.",
+  BUFFS_LEARNED_NONE = "keine neuen Buffs zum Lernen: trink zuerst dein Fläschchen oder Elixier, dann /hk buffs learn.",
+  BUFFS_FORGOTTEN = "gelernte Fläschchen-/Elixier-Buffs gelöscht.",
+  BUFFS_LEARNED_COUNT = "gelernt %d",
 
   MACROS_TITLE = "Makros",
   MACROS_NONE = "Du hast keine Makros.",
@@ -279,7 +300,7 @@ register("deDE", {
   MAC_P_LENGTH = "Das Makro ist %d Zeichen lang, das Spiel speichert aber nur %d. Das Ende wird abgeschnitten.",
   MAC_P_UNKNOWN_COMMAND = "Zeile %d: %s ist kein Befehl, den Hearthkeep kennt. Vielleicht ein Tippfehler oder ein Befehl eines nicht geladenen Addons.",
   MAC_P_UNBALANCED = "Zeile %d: Die eckigen Klammern [ ] passen nicht zusammen, daher funktionieren die Bedingungen dieser Zeile nicht.",
-  MAC_P_UNKNOWN_CONDITION = "Zeile %d: \"%s\" ist keine Bedingung, die das Spiel kennt, daher funktioniert dieser Block nicht wie erwartet.",
+  MAC_P_UNKNOWN_CONDITION = "Zeile %d: Hearthkeep erkennt die Bedingung \"%s\" nicht; prüfe die Schreibweise, dieser Block funktioniert vielleicht nicht wie erwartet.",
   MAC_P_NO_SLASH = "Zeile %d beginnt nicht mit / oder #, daher wird sie als Text in den Chat geschickt.",
   MAC_P_EMPTY_COMMAND = "Zeile %d hat ein / ohne Befehl dahinter.",
 
@@ -336,4 +357,7 @@ register("deDE", {
   known = { "du den Zauber kennst", "du den Zauber nicht kennst", "du %s kennst", "du %s nicht kennst" },
   cursor = { "du etwas am Mauszeiger hältst", "dein Mauszeiger leer ist" },
   actionbar = { "eine bestimmte Aktionsleiste aktiv ist", "eine andere Aktionsleiste aktiv ist", "Aktionsleiste %s aktiv ist", "Aktionsleiste %s nicht aktiv ist" },
+  bonusbar = { "eine Bonus-Aktionsleiste aktiv ist (Haltung, Gestalt oder Verstohlenheit)", "keine Bonus-Aktionsleiste aktiv ist", "Bonusleiste %s aktiv ist", "Bonusleiste %s nicht aktiv ist" },
+  possessbar = { "du die Aktionsleiste einer übernommenen Kreatur steuerst", "du keine Besessenheitsleiste hast" },
+  spec = { "eine bestimmte Talentspezialisierung aktiv ist", "eine andere Talentspezialisierung aktiv ist", "Talentspezialisierung %s aktiv ist", "Talentspezialisierung %s nicht aktiv ist" },
 })

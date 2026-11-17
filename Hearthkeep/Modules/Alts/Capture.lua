@@ -72,5 +72,8 @@ function Capture.Snapshot()
 end
 
 function Capture.Request()
-  HK:Debounce("Alts.snapshot", 3, Capture.Snapshot)
+  HK:Debounce("Alts.snapshot", 3, function()
+    -- The module may have been turned off while the snapshot was waiting.
+    if HK:IsModuleEnabled("Alts") then Capture.Snapshot() end
+  end)
 end

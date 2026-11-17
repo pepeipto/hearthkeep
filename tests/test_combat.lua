@@ -360,7 +360,8 @@ test("Buffs shows what is missing inside an instance and hides in combat", funct
   Stub.flushTimers()
   local frame = HK.HUD.Get("Buffs")
   truthy(frame.shown)
-  eq(texts(frame), { "Antes de entrar", "Sin frasco ni elixir", "Tienes experiencia de descanso", "" })
+  eq(texts(frame), { "Antes de entrar", "Sin frasco ni elixir", "Tienes experiencia de descanso",
+    "¿No reconoce tu frasco o elixir? Tómalo y escribe /hk buffs learn.", "" })
   Stub.fire("PLAYER_REGEN_DISABLED")
   falsy(frame.shown)
   Stub.fire("UNIT_AURA", "player")
@@ -659,4 +660,99 @@ test("Macros window says when there are no macros", function()
   HK:EnableModule("Macros")
   truthy(HK.Macros.Open())
   eq(HK.Macros.Frame().detail.text, "You have no macros.")
+end)
+
+-- Buffs: learned flasks and elixirs ---------------------------------------------------
+
+test("Buffs.Learn records current buffs by spell ID and name, skipping food and eating", function()
+  local HK = boot()
+  local kw = HK.Buffs.Keywords("enUS")
+  local learned = HK.Buffs.NewLearned()
+  local added = HK.Buffs.Learn({
+    { name = "Greater Agility", spellId = 11334 }, { name = "Well Fed", spellId = 1 },
+    { name = "Food", spellId = 2 }, { name = "Supreme Power" }, { name = "" },
+  }, kw, learned)
+  eq(added, { "Greater Agility", "Supreme Power" })
+  eq(learned.ids[11334], "Greater Agility")
+  eq(learned.ids[1], nil)
+  truthy(learned.names["supreme power"])
+  eq(HK.Buffs.Learn({ { name = "Greater Agility", spellId = 11334 } }, kw, learned), {})
+  eq(HK.Buffs.LearnedCount(learned), 2)
+end)
+
+test("Buffs.Missing counts a learned buff (by ID or name) as flask/elixir", function()
+  local HK = boot()
+  local kw = HK.Buffs.Keywords("enUS")
+  local all = { food = false, flask = true, rested = false }
+  local learned = { ids = { [11334] = "Greater Agility" }, names = { ["supreme power"] = true } }
+  eq(HK.Buffs.Missing({ { name = "Greater Agility" } }, all, kw, false), { "flask" })
+  eq(HK.Buffs.Missing({ { name = "Agilidad superior", spellId = 11334 } }, all, kw, false, learned), {})
+  eq(HK.Buffs.Missing({ { name = "SUPREME POWER" } }, all, kw, false, learned), {})
+  eq(HK.Buffs.Missing({ { name = "Battle Shout" } }, all, kw, false, learned), { "flask" })
+  eq(HK.Buffs.Missing({ { name = "Flask of the Titans" } }, all, kw, false, learned), {})
+end)
+
+test("/hk buffs learn and forget store and clear the learned list per account", function()
+  local HK = boot()
+  local auras = { { name = "Greater Agility", spellId = 11334 }, { name = "Well Fed", spellId = 1 } }
+  buffWorld(auras, { instance = true })
+  HK:EnableModule("Buffs")
+  Stub.flushTimers()
+  local frame = HK.HUD.Get("Buffs")
+  eq(texts(frame), { "Before the pull", "No flask or elixir", "Flask or elixir not recognised? Drink it and type /hk buffs learn.", "", "" })
+  SlashCmdList.HEARTHKEEP("buffs learn")
+  truthy(Stub.printed[#Stub.printed]:find("Greater Agility", 1, true))
+  falsy(Stub.printed[#Stub.printed]:find("Well Fed", 1, true))
+  eq(HK.ModuleDB("Buffs").learned.ids[11334], "Greater Agility")
+  Stub.flushTimers()
+  falsy(frame.shown)
+  SlashCmdList.HEARTHKEEP("buffs learn")
+  truthy(Stub.printed[#Stub.printed]:find("no new buffs", 1, true))
+  SlashCmdList.HEARTHKEEP("buffs")
+  truthy(Stub.printed[#Stub.printed]:find("learned 1", 1, true))
+  truthy(Stub.printed[#Stub.printed]:find("/hk buffs learn", 1, true))
+  SlashCmdList.HEARTHKEEP("buffs forget")
+  eq(HK.Buffs.LearnedCount(HK.ModuleDB("Buffs").learned), 0)
+  Stub.flushTimers()
+  truthy(frame.shown)
+end)
+
+test("Buffs.Settings drops bad learned data", function()
+  local HK = boot()
+  HK.ModuleDB("Buffs").learned = { ids = { [5] = "A", x = "B", [6] = 7 }, names = { a = true, [3] = true, b = "yes" } }
+  local learned = HK.Buffs.Settings().learned
+  eq(learned, { ids = { [5] = "A" }, names = { a = true } })
+  HK.ModuleDB("Buffs").learned = "bad"
+  eq(HK.Buffs.Settings().learned, { ids = {}, names = {} })
+end)
+
+test("the learn strings exist in every language", function()
+  local HK = boot()
+  eq(HK.Locale.MissingKeys("esES"), {})
+  eq(HK.Locale.MissingKeys("deDE"), {})
+end)
+
+-- Macros: Classic conditions ------------------------------------------------------------
+
+test("Macros knows bonusbar, possessbar, spec, pet and actionbar/bar", function()
+  local HK = boot()
+  local function block(text) return HK.Macros.ParseClauses(text .. " X")[1].blocks[1] end
+  eq(HK.Macros.Analyze("/cast [bonusbar:1,nopossessbar,spec:2,pet,bar:2] Attack").problems, {})
+  eq(HK.Macros.ExplainBlock(block("[bonusbar:1]")), "if bonus bar 1 is active")
+  eq(HK.Macros.ExplainBlock(block("[possessbar]")), "if you control a possessed creature's action bar")
+  eq(HK.Macros.ExplainBlock(block("[nospec:2]")), "if talent specialization 2 is not active")
+  eq(HK.Macros.ExplainBlock(block("[bar:2]")), "if action bar 2 is active")
+  eq(codes(HK.Macros.Analyze("/cast [vehicleui] Attack")), { "UNKNOWN_CONDITION:1" })
+  HK.db.settings.language = "esES"
+  eq(HK.Macros.ExplainBlock(block("[spec:1]")), "si está activa la especialización de talentos 1")
+  HK.db.settings.language = "deDE"
+  eq(HK.Macros.ExplainBlock(block("[nobonusbar]")), "wenn keine Bonus-Aktionsleiste aktiv ist")
+end)
+
+test("an unknown condition is described as unknown to Hearthkeep, not to the game", function()
+  local HK = boot()
+  local r = HK.Macros.Analyze("/cast [hostile] Frostbolt")
+  local text = HK.Macros.DescribeProblem(r.problems[1])
+  truthy(text:find("Hearthkeep does not recognise", 1, true), text)
+  falsy(text:find("the game", 1, true))
 end)

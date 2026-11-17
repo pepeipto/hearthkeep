@@ -191,3 +191,76 @@ test("home and HUD strings exist in every language", function()
   eq(HK.Locale.MissingKeys("esES"), {})
   eq(HK.Locale.MissingKeys("deDE"), {})
 end)
+
+test("/hk hud shows every HUD frame of an enabled module and restores it on lock", function()
+  local HK = boot()
+  HK:RegisterModule("XP", { title = "MOD_XP_T" })
+  HK:RegisterModule("Bags", { default = false })
+  Stub.fire("PLAYER_LOGIN")
+  HK.Locale.Register("enUS", { MOD_XP_T = "Experience" })
+  local xp = HK.HUD.Create("XP", 100, 20)
+  local bags = HK.HUD.Create("Bags", 100, 20)
+  local free = HK.HUD.Create("Free", 100, 20)
+  xp:Hide()
+  bags:Hide()
+  free:Show()
+  local told = {}
+  xp.hkOnLockChanged = function(_, unlocked) told[#told + 1] = unlocked end
+  SlashCmdList.HEARTHKEEP("hud")
+  truthy(xp:IsShown())
+  truthy(xp.hkHandle:IsShown())
+  eq(xp.hkHandle:GetText(), "Experience")
+  eq(xp.hkWasShown, false)
+  falsy(bags:IsShown())
+  truthy(free:IsShown())
+  -- The owner hides while unlocked: remembered, the frame stays visible to be dragged.
+  xp:Hide()
+  truthy(xp:IsShown())
+  free:SetShown(false)
+  truthy(free:IsShown())
+  SlashCmdList.HEARTHKEEP("hud")
+  falsy(xp:IsShown())
+  falsy(xp.hkHandle:IsShown())
+  eq(xp.hkWasShown, nil)
+  falsy(free:IsShown())
+  falsy(bags:IsShown())
+  eq(told, { true, false })
+  xp:Show()
+  truthy(xp:IsShown())
+end)
+
+test("the home list scrolls with the mouse wheel and every row can be reached", function()
+  local HK = boot()
+  for i = 1, 40 do HK:RegisterModule(("Mod%02d"):format(i), { group = "qol" }) end
+  Stub.fire("PLAYER_LOGIN")
+  truthy(HK.Home.Open())
+  local rows = HK.Home.ListRows()
+  truthy(#rows > HK.Home.LIST_ROWS)
+  local frame = HK.Home.frame
+  local wheel = frame.scripts.OnMouseWheel
+  truthy(wheel, "no mouse wheel script")
+  wheel(frame, 1)
+  eq(HK.Home.offset, 0)
+  local seen = {}
+  for _ = 1, #rows do
+    for i, row in ipairs(HK.Home.VisibleRows()) do seen[HK.Home.offset + i] = row.text end
+    wheel(frame, -1)
+  end
+  eq(HK.Home.MaxOffset(), #rows - HK.Home.LIST_ROWS)
+  eq(HK.Home.offset, HK.Home.MaxOffset())
+  for i = 1, #rows do eq(seen[i], rows[i].text) end
+  eq(HK.Home.Scroll(1000), HK.Home.MaxOffset())
+  eq(HK.Home.Scroll(-1000), 0)
+end)
+
+test("opening the home window on a module scrolls its row into view", function()
+  local HK = boot()
+  for i = 1, 40 do HK:RegisterModule(("Mod%02d"):format(i), { group = "qol" }) end
+  Stub.fire("PLAYER_LOGIN")
+  HK.Home.Open("Mod40")
+  local found = false
+  for _, row in ipairs(HK.Home.VisibleRows()) do
+    if row.name == "Mod40" then found = true end
+  end
+  truthy(found, "Mod40 not visible")
+end)
