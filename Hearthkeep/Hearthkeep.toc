@@ -18,6 +18,12 @@ Options.lua
 HUD.lua
 Home.lua
 Setup.lua
+Modules\QoL\Locale.lua
+Modules\QoL\XP.lua
+Modules\QoL\Bags.lua
+Modules\QoL\Vendor.lua
+Modules\QoL\Loot.lua
+Modules\QoL\TopBar.lua
 Modules\Alts\Format.lua
 Modules\Alts\Store.lua
 Modules\Alts\Query.lua
