@@ -46,7 +46,7 @@ end
 local ACTIONS = {
   MENU_HOME = function() HK.Home.Toggle() end,
   MENU_MODES = function() HK.Modes.Window.Toggle() end,
-  MENU_ALTS = function() Alts.Window.Toggle() end,
+  MENU_ALTS = function() Alts.Window.Open() end,
   MENU_SETUP = function() HK.Setup.Open() end,
 }
 

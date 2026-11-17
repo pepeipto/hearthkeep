@@ -68,7 +68,9 @@ function Capture.Build()
 end
 
 function Capture.Snapshot()
-  return Alts.Store.Save(Capture.Build())
+  local saved = Alts.Store.Save(Capture.Build())
+  if saved and HK.Home then HK.Home.Changed("Alts") end
+  return saved
 end
 
 function Capture.Request()

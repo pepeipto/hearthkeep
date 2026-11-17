@@ -236,15 +236,51 @@ local function clientLocale()
   return type(code) == "string" and code or "enUS"
 end
 
+
+-- What the player has right now, per check: { food = name|nil, flask = name|nil,
+-- rested = boolean, inInstance = boolean, db = settings }.
+function Buffs.Status()
+  local db = Buffs.Settings()
+  local keywords = Buffs.Keywords(clientLocale())
+  local found = {}
+  for _, aura in ipairs(Buffs.ReadAuras()) do
+    local kind = Buffs.Classify(aura.name, keywords)
+    if kind == "elixir" then kind = "flask" end
+    if kind ~= "food" and Buffs.IsLearned(aura, db.learned) then kind = "flask" end
+    if kind and not found[kind] then found[kind] = aura.name end
+  end
+  return { food = found.food, flask = found.flask, rested = hasRested(), inInstance = inInstance(), db = db }
+end
+
+-- Dashboard card: an alert only when food or flask is missing where the check applies.
+function Buffs.Card()
+  local status = Buffs.Status()
+  local db = status.db
+  if db.onlyInstances and not status.inInstance then return nil end
+  local food = db.checks.food and not status.food
+  local flask = db.checks.flask and not status.flask
+  if not (food or flask) then return nil end
+  local L = HK.L
+  local value = (food and flask) and L.BUFFS_CARD_BOTH or (food and L.BUFFS_CARD_FOOD or L.BUFFS_CARD_FLASK)
+  local sub = (flask and Buffs.LearnedCount(db.learned) == 0) and L.BUFFS_CARD_LEARN or L.BUFFS_CARD_SUB
+  return { title = L.MOD_BUFFS, value = value, sub = sub, alert = true, order = 5 }
+end
+
 -- Frames ---------------------------------------------------------------------------
 
+local UI = HK.UI
 local LINES = 2 + #Buffs.CHECKS
 local LINE_HEIGHT = 14
 local frame, texts
 local eventsRegistered = false
 local combat = false
+local pageHolder
 
 local schedule
+
+local function changed()
+  if HK.Home then HK.Home.Changed(NAME) end
+end
 
 local function ensureFrame()
   if frame then return frame end
@@ -252,9 +288,9 @@ local function ensureFrame()
   frame = HK.HUD.Create(NAME, 200, 12 + LINES * LINE_HEIGHT, { "TOP", "TOP", 0, -140 })
   texts = {}
   for i = 1, LINES do
-    local fs = frame:CreateFontString(nil, "OVERLAY", i == 1 and "GameFontNormal" or "GameFontHighlightSmall")
+    local fs = UI.Text(frame, i == 1 and "normal" or "small", i == 1 and "gold" or "text")
+    if fs.SetWordWrap then fs:SetWordWrap(false) end
     fs:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -6 - (i - 1) * LINE_HEIGHT)
-    fs:SetJustifyH("LEFT")
     texts[i] = fs
   end
   frame.hkLines = texts
@@ -266,8 +302,13 @@ local function ensureFrame()
   return frame
 end
 
+-- Palette colour of each HUD line: title gold, missing consumables red, rested amber,
+-- the learn hint muted.
+local LINE_COLORS = { food = "bad", flask = "bad", rested = "warn" }
+
 function Buffs.Refresh()
   if not HK:IsModuleEnabled(NAME) then return end
+  changed()
   if combat or inCombat() then
     if frame then frame:Hide() end
     return
@@ -281,7 +322,11 @@ function Buffs.Refresh()
     return
   end
   local lines = Buffs.Lines(missing, Buffs.LearnedCount(db.learned) == 0)
-  for i = 1, LINES do texts[i]:SetText(lines[i] or "") end
+  for i = 1, LINES do
+    texts[i]:SetText(lines[i] or "")
+    local key = missing[i - 1]
+    UI.SetTextColorKey(texts[i], i == 1 and "gold" or (key and LINE_COLORS[key]) or "muted")
+  end
   frame:SetHeight(12 + #lines * LINE_HEIGHT)
   frame:Show()
 end
@@ -336,22 +381,48 @@ function Buffs.StatusText()
   return L.BUFFS_STATUS:format(table.concat(parts, ", ")) .. " " .. L.BUFFS_LEARN_HINT
 end
 
+local function afterChange()
+  if HK:IsModuleEnabled(NAME) then schedule() end
+  changed()
+end
+
+-- Records the buffs the player has now as flask/elixir. Returns the names added.
+function Buffs.LearnNow()
+  local db = Buffs.Settings()
+  local added = Buffs.Learn(Buffs.ReadAuras(), Buffs.Keywords(clientLocale()), db.learned)
+  if #added > 0 then
+    print("Hearthkeep: " .. HK.L.BUFFS_LEARNED:format(table.concat(added, ", ")))
+  else
+    print("Hearthkeep: " .. HK.L.BUFFS_LEARNED_NONE)
+  end
+  afterChange()
+  return added
+end
+
+function Buffs.ForgetAll()
+  Buffs.Settings().learned = Buffs.NewLearned()
+  print("Hearthkeep: " .. HK.L.BUFFS_FORGOTTEN)
+  afterChange()
+end
+
+-- key: "food", "flask", "rested" or "instances". Returns the state applied.
+function Buffs.SetCheck(key, on)
+  local db = Buffs.Settings()
+  if key == "instances" then db.onlyInstances = on and true or false
+  elseif CHECK_LABEL[key] then db.checks[key] = on and true or false
+  else return nil end
+  afterChange()
+  return on and true or false
+end
+
 function Buffs.Command(args)
   local word = (args or ""):lower()
   local db = Buffs.Settings()
   if word == "learn" then
-    local added = Buffs.Learn(Buffs.ReadAuras(), Buffs.Keywords(clientLocale()), db.learned)
-    if #added > 0 then
-      print("Hearthkeep: " .. HK.L.BUFFS_LEARNED:format(table.concat(added, ", ")))
-    else
-      print("Hearthkeep: " .. HK.L.BUFFS_LEARNED_NONE)
-    end
-    if HK:IsModuleEnabled(NAME) then schedule() end
+    Buffs.LearnNow()
     return
   elseif word == "forget" then
-    db.learned = Buffs.NewLearned()
-    print("Hearthkeep: " .. HK.L.BUFFS_FORGOTTEN)
-    if HK:IsModuleEnabled(NAME) then schedule() end
+    Buffs.ForgetAll()
     return
   elseif word == "instances" then
     db.onlyInstances = not db.onlyInstances
@@ -362,13 +433,151 @@ function Buffs.Command(args)
     return
   end
   print("Hearthkeep: " .. Buffs.StatusText())
-  if HK:IsModuleEnabled(NAME) then schedule() end
+  afterChange()
 end
+
+-- Page in the Hearthkeep window ------------------------------------------------------
+
+local ROWS = {
+  { key = "food", icon = "Interface\\Icons\\INV_Misc_Food_15", label = "BUFFS_ROW_FOOD" },
+  { key = "flask", icon = "Interface\\Icons\\INV_Potion_62", label = "BUFFS_ROW_FLASK" },
+  { key = "rested", icon = "Interface\\Icons\\Spell_Nature_Sleep", label = "BUFFS_ROW_RESTED" },
+}
+local MARK_OK = "Interface\\RaidFrame\\ReadyCheck-Ready"
+local MARK_BAD = "Interface\\RaidFrame\\ReadyCheck-NotReady"
+local MARK_OFF = "Interface\\RaidFrame\\ReadyCheck-Waiting"
+
+local function checkRow(holder, w, y, spec)
+  local row = UI.Panel(holder, "card", "line")
+  row:SetSize(w, 40)
+  row:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, y)
+  row.icon = UI.Icon(row, 28, spec.icon)
+  row.icon:SetPoint("LEFT", row, "LEFT", 8, 0)
+  row.label = UI.Text(row, "normal", "text")
+  row.label:SetPoint("TOPLEFT", row.icon, "TOPRIGHT", 10, -1)
+  row.detail = UI.Text(row, "small", "muted")
+  row.detail:SetPoint("BOTTOMLEFT", row.icon, "BOTTOMRIGHT", 10, 1)
+  row.detail:SetWidth(w - 260)
+  if row.detail.SetWordWrap then row.detail:SetWordWrap(false) end
+  row.toggle = UI.Toggle(row, function(want) return Buffs.SetCheck(spec.key, want) end)
+  row.toggle:SetPoint("RIGHT", row, "RIGHT", -10, 0)
+  row.mark = row:CreateTexture(nil, "OVERLAY")
+  row.mark:SetSize(20, 20)
+  row.mark:SetPoint("RIGHT", row.toggle, "LEFT", -12, 0)
+  row.state = UI.Text(row, "small", "good", "RIGHT")
+  row.state:SetPoint("RIGHT", row.mark, "LEFT", -6, 0)
+  row.spec = spec
+  return row
+end
+
+local function buildPage(holder, w, h)
+  pageHolder = holder
+  w = (type(w) == "number" and w > 0) and w or 568
+  h = (type(h) == "number" and h > 0) and h or 330
+  holder.banner = UI.Panel(holder, "card", "line")
+  holder.banner:SetSize(w, 28)
+  holder.banner:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+  holder.bannerText = UI.Text(holder.banner, "small", "text")
+  holder.bannerText:SetPoint("LEFT", holder.banner, "LEFT", 10, 0)
+  holder.bannerText:SetWidth(w - 20)
+  holder.rows = {}
+  for i, spec in ipairs(ROWS) do holder.rows[i] = checkRow(holder, w, -36 - (i - 1) * 44, spec) end
+  local y = -36 - #ROWS * 44
+  holder.instances = UI.Panel(holder, "card", "line")
+  holder.instances:SetSize(w, 30)
+  holder.instances:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, y)
+  holder.instancesLabel = UI.Text(holder.instances, "normal", "text")
+  holder.instancesLabel:SetPoint("LEFT", holder.instances, "LEFT", 12, 0)
+  holder.instancesToggle = UI.Toggle(holder.instances, function(want) return Buffs.SetCheck("instances", want) end)
+  holder.instancesToggle:SetPoint("RIGHT", holder.instances, "RIGHT", -10, 0)
+  y = y - 38
+  local learn = UI.Panel(holder, "card", "line")
+  learn:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, y)
+  learn:SetSize(w, math.max(80, h + y))
+  holder.learn = learn
+  holder.learnTitle = UI.Text(learn, "normal", "gold")
+  holder.learnTitle:SetPoint("TOPLEFT", learn, "TOPLEFT", 12, -9)
+  holder.learnText = UI.Text(learn, "small", "muted")
+  holder.learnText:SetPoint("TOPLEFT", holder.learnTitle, "BOTTOMLEFT", 0, -5)
+  holder.learnText:SetWidth(w - 170)
+  holder.learnedNames = UI.Text(learn, "small", "faint")
+  holder.learnedNames:SetPoint("TOPLEFT", holder.learnText, "BOTTOMLEFT", 0, -5)
+  holder.learnedNames:SetWidth(w - 170)
+  holder.learnButton = UI.Button(learn, "", 130, 22, function() Buffs.LearnNow() end, "primary")
+  holder.learnButton:SetPoint("TOPRIGHT", learn, "TOPRIGHT", -12, -10)
+  holder.forgetButton = UI.Button(learn, "", 130, 22, function() Buffs.ForgetAll() end)
+  holder.forgetButton:SetPoint("TOPRIGHT", holder.learnButton, "BOTTOMRIGHT", 0, -6)
+end
+
+local function learnedNames(learned)
+  local names = {}
+  for _, name in pairs(learned.ids or {}) do names[name:lower()] = name end
+  for lower in pairs(learned.names or {}) do
+    if not names[lower] then names[lower] = lower end
+  end
+  local list = {}
+  for _, name in pairs(names) do list[#list + 1] = name end
+  table.sort(list)
+  return list
+end
+
+local function paintRow(row, status, db)
+  local L = HK.L
+  local key = row.spec.key
+  row.label:SetText(L[row.spec.label])
+  local on = db.checks[key]
+  row.toggle:SetState(on)
+  local ok, detail
+  if key == "rested" then
+    ok = not status.rested
+    detail = status.rested and L.BUFFS_ROW_RESTED_YES or L.BUFFS_ROW_RESTED_NO
+  else
+    ok = status[key] ~= nil
+    detail = ok and L.BUFFS_ROW_ACTIVE:format(status[key]) or L.BUFFS_ROW_MISSING
+  end
+  if not on then
+    row.mark:SetTexture(MARK_OFF)
+    row.state:SetText(L.BUFFS_ROW_OFF)
+    UI.SetTextColorKey(row.state, "faint")
+  else
+    row.mark:SetTexture(ok and MARK_OK or MARK_BAD)
+    row.state:SetText(ok and L.BUFFS_ROW_OK or (key == "rested" and L.BUFFS_ROW_REMIND or L.BUFFS_ROW_NO))
+    UI.SetTextColorKey(row.state, ok and "good" or (key == "rested" and "warn" or "bad"))
+  end
+  row.detail:SetText(detail)
+  UI.SetPanelColors(row, "card", (on and not ok) and (key == "rested" and "warn" or "bad") or "line")
+end
+
+local function refreshPage(holder)
+  if not holder.rows then return end
+  local L = HK.L
+  local status = Buffs.Status()
+  local db = status.db
+  local active = status.inInstance or not db.onlyInstances
+  holder.bannerText:SetText(active and L.BUFFS_PAGE_ACTIVE or L.BUFFS_PAGE_WAITING)
+  UI.SetPanelColors(holder.banner, "card", active and "gold" or "line")
+  for _, row in ipairs(holder.rows) do paintRow(row, status, db) end
+  holder.instancesLabel:SetText(L.BUFFS_PAGE_INSTANCES)
+  holder.instancesToggle:SetState(db.onlyInstances)
+  local names = learnedNames(db.learned)
+  holder.learnTitle:SetText(L.BUFFS_PAGE_LEARN_TITLE:format(#names))
+  holder.learnText:SetText(L.BUFFS_PAGE_LEARN_TEXT)
+  holder.learnedNames:SetText(#names > 0 and table.concat(names, ", ") or L.BUFFS_PAGE_LEARNED_NONE)
+  holder.learnButton:SetLabel(L.BUFFS_PAGE_LEARN)
+  holder.forgetButton:SetLabel(L.BUFFS_PAGE_FORGET)
+end
+
+Buffs.Page = { build = buildPage, refresh = refreshPage }
+
+function Buffs.PageHolder() return pageHolder end
 
 Buffs.Module = HK:RegisterModule(NAME, {
   group = "combat", title = "MOD_BUFFS", desc = "MOD_BUFFS_DESC", command = "buffs",
   default = false,
   presets = { minimal = false, recommended = true },
+  Card = function() return Buffs.Card() end,
+  Page = Buffs.Page,
+  Open = function() if HK.Home then HK.Home.Open(NAME) end end,
   OnEnable = function()
     combat = inCombat()
     registerEvents()

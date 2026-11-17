@@ -142,7 +142,12 @@ function Threat.Display(rows)
       lines[#lines + 1] = text
     end
   end
-  return { lines = lines, warn = warn }
+  -- rows: the members shown under the header (same order as lines[2..]).
+  local shown = {}
+  if others > 0 then
+    for i = 1, math.min(#rows, Threat.MAX_ROWS) do shown[i] = rows[i] end
+  end
+  return { lines = lines, warn = warn, rows = shown, me = me }
 end
 
 -- Game reads -----------------------------------------------------------------------
@@ -195,37 +200,80 @@ function Threat.Read()
   return rows, reason
 end
 
+
+-- True when the player is in a party or raid.
+local function inGroup()
+  if type(_G.IsInGroup) == "function" then return flag(safe("IsInGroup", _G.IsInGroup)) end
+  if groupCount() > 0 then return true end
+  local n = safe("GetNumPartyMembers", _G.GetNumPartyMembers)
+  return type(n) == "number" and not isSecret(n) and n > 0
+end
+
 -- Frames ---------------------------------------------------------------------------
 
+local UI = HK.UI
 local LINES = 1 + Threat.MAX_ROWS
-local LINE_HEIGHT = 14
-local frame, texts
+local HEADER_HEIGHT = 18
+local BAR_HEIGHT = 15
+local BAR_GAP = 2
+local WIDTH = 190
+local frame, texts, bars
 local pending = false
 local warned = false
 local eventsRegistered = false
+local pageHolder
 
 local function settings()
   local db = HK.ModuleDB(NAME)
   if type(db.sound) ~= "boolean" then db.sound = true end
+  if type(db.solo) ~= "boolean" then db.solo = true end
   return db
+end
+Threat.Settings = settings
+
+local function changed()
+  if HK.Home then HK.Home.Changed(NAME) end
 end
 
 local function inCombat()
   return type(_G.InCombatLockdown) == "function" and flag(safe("InCombatLockdown", _G.InCombatLockdown))
 end
 
+-- Palette colour of one member's bar: you in red past the warning, you in gold, the tank
+-- greyed, everyone else in the bar colour.
+function Threat.BarColor(row, warn)
+  if row.isPlayer then return warn and "bad" or "gold" end
+  if row.isTanking then return "faint" end
+  return "bar"
+end
+
+-- A threat bar with its label drawn on top: { bar, text }.
+local function threatBar(parent, width)
+  local bar = UI.Bar(parent, width, BAR_HEIGHT)
+  local text = UI.Text(bar, "small", "text")
+  if text.SetWordWrap then text:SetWordWrap(false) end
+  text:SetPoint("LEFT", bar, "LEFT", 4, 0)
+  return bar, text
+end
+
 local function ensureFrame()
   if frame then return frame end
   if inCombat() then return nil end
-  frame = HK.HUD.Create(NAME, 190, 12 + LINES * LINE_HEIGHT, { "CENTER", "CENTER", 260, -60 })
-  texts = {}
-  for i = 1, LINES do
-    local fs = frame:CreateFontString(nil, "OVERLAY", i == 1 and "GameFontNormal" or "GameFontHighlightSmall")
-    fs:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -6 - (i - 1) * LINE_HEIGHT)
-    fs:SetJustifyH("LEFT")
-    texts[i] = fs
+  frame = HK.HUD.Create(NAME, WIDTH, 12 + HEADER_HEIGHT + Threat.MAX_ROWS * (BAR_HEIGHT + BAR_GAP),
+    { "CENTER", "CENTER", 260, -60 })
+  texts, bars = {}, {}
+  texts[1] = UI.Text(frame, "normal", "gold")
+  if texts[1].SetWordWrap then texts[1]:SetWordWrap(false) end
+  texts[1]:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -6)
+  for i = 1, Threat.MAX_ROWS do
+    local bar, text = threatBar(frame, WIDTH - 16)
+    bar:SetPoint("TOPLEFT", frame, "TOPLEFT", 8, -6 - HEADER_HEIGHT - (i - 1) * (BAR_HEIGHT + BAR_GAP))
+    bar:Hide()
+    bars[i] = bar
+    texts[i + 1] = text
   end
   frame.hkLines = texts
+  frame.hkBars = bars
   frame:Hide()
   return frame
 end
@@ -236,16 +284,34 @@ local function playWarning()
   safe("PlaySound", _G.PlaySound, kit)
 end
 
-local function show(lines)
+local function show(lines, rows, warn)
   for i = 1, LINES do texts[i]:SetText(lines[i] or "") end
-  frame:SetHeight(12 + math.max(1, #lines) * LINE_HEIGHT)
+  local count = 0
+  for i, bar in ipairs(bars) do
+    local row = rows and rows[i]
+    if row and lines[i + 1] then
+      count = i
+      bar:SetValue((tonumber(row.scaled) or 0) / 100)
+      bar:SetColorKey(Threat.BarColor(row, warn))
+      bar:Show()
+    else
+      bar:Hide()
+    end
+  end
+  frame:SetHeight(12 + HEADER_HEIGHT + count * (BAR_HEIGHT + BAR_GAP))
   frame:Show()
 end
 
 function Threat.Refresh()
   pending = false
   if not HK:IsModuleEnabled(NAME) then return end
+  changed()
   if not ensureFrame() then return end
+  if not settings().solo and not inGroup() then
+    warned = false
+    frame:Hide()
+    return
+  end
   local rows, reason = Threat.Read()
   if reason == "missing" or reason == "secret" then
     warned = false
@@ -260,7 +326,7 @@ function Threat.Refresh()
   local display = Threat.Display(rows)
   if display.warn and not warned then playWarning() end
   warned = display.warn
-  show(display.lines)
+  show(display.lines, display.rows, display.warn)
 end
 
 -- Throttle: the first event schedules one refresh; later events until then are folded in.
@@ -299,11 +365,19 @@ local function printStatus()
     settings().sound and L.THREAT_ON or L.THREAT_OFF))
 end
 
+-- key: "sound" or "solo". Returns the state applied.
+function Threat.Set(key, on)
+  if key ~= "sound" and key ~= "solo" then return nil end
+  settings()[key] = on and true or false
+  if HK:IsModuleEnabled(NAME) then Threat.Schedule() end
+  changed()
+  return on and true or false
+end
+
 function Threat.Command(args)
   local word = (args or ""):lower()
-  if word == "sound" then
-    local db = settings()
-    db.sound = not db.sound
+  if word == "sound" or word == "solo" then
+    Threat.Set(word, not settings()[word])
   elseif word ~= "" then
     print("Hearthkeep: " .. HK.L.THREAT_HELP)
     return
@@ -311,10 +385,145 @@ function Threat.Command(args)
   printStatus()
 end
 
+-- Page in the Hearthkeep window ------------------------------------------------------
+
+local function settingRow(parent, w, y, key)
+  local row = CreateFrame("Frame", nil, parent)
+  row:SetSize(w, 26)
+  row:SetPoint("TOPLEFT", parent, "TOPLEFT", 12, y)
+  row.label = UI.Text(row, "normal", "text")
+  row.label:SetPoint("LEFT", row, "LEFT", 0, 0)
+  row.label:SetWidth(w - 110)
+  row.toggle = UI.Toggle(row, function(want) return Threat.Set(key, want) end)
+  row.toggle:SetPoint("RIGHT", row, "RIGHT", 0, 0)
+  row.key = key
+  return row
+end
+
+-- A small column of labelled bars inside a panel (the preview and the live list).
+local function barColumn(panel, width, count)
+  local list = {}
+  for i = 1, count do
+    local bar, text = threatBar(panel, width)
+    bar:SetPoint("TOPLEFT", panel, "TOPLEFT", 12, -56 - (i - 1) * (BAR_HEIGHT + 6))
+    bar.text = text
+    bar.right = UI.Text(bar, "small", "text", "RIGHT")
+    bar.right:SetPoint("RIGHT", bar, "RIGHT", -4, 0)
+    list[i] = bar
+  end
+  return list
+end
+
+local function buildPage(holder, w, h)
+  pageHolder = holder
+  w = (type(w) == "number" and w > 0) and w or 568
+  h = (type(h) == "number" and h > 0) and h or 330
+  local settingsPanel = UI.Panel(holder, "card", "line")
+  settingsPanel:SetSize(w, 70)
+  settingsPanel:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+  holder.sound = settingRow(settingsPanel, w - 24, -8, "sound")
+  holder.solo = settingRow(settingsPanel, w - 24, -36, "solo")
+
+  local colW = math.floor((w - 10) / 2)
+  local colH = h - 80
+  local preview = UI.Panel(holder, "card", "line")
+  preview:SetSize(colW, colH)
+  preview:SetPoint("TOPLEFT", settingsPanel, "BOTTOMLEFT", 0, -10)
+  holder.previewTitle = UI.Text(preview, "small", "muted")
+  holder.previewTitle:SetPoint("TOPLEFT", preview, "TOPLEFT", 12, -10)
+  holder.previewHeader = UI.Text(preview, "normal", "bad")
+  holder.previewHeader:SetPoint("TOPLEFT", preview, "TOPLEFT", 12, -32)
+  holder.previewBars = barColumn(preview, colW - 24, 3)
+  holder.previewNote = UI.Text(preview, "small", "faint")
+  holder.previewNote:SetPoint("BOTTOMLEFT", preview, "BOTTOMLEFT", 12, 10)
+  holder.previewNote:SetWidth(colW - 24)
+
+  local live = UI.Panel(holder, "card", "line")
+  live:SetSize(w - colW - 10, colH)
+  live:SetPoint("TOPLEFT", preview, "TOPRIGHT", 10, 0)
+  holder.liveTitle = UI.Text(live, "small", "muted")
+  holder.liveTitle:SetPoint("TOPLEFT", live, "TOPLEFT", 12, -10)
+  holder.liveHeader = UI.Text(live, "normal", "gold")
+  holder.liveHeader:SetPoint("TOPLEFT", live, "TOPLEFT", 12, -32)
+  holder.liveBars = barColumn(live, w - colW - 34, Threat.MAX_ROWS)
+  holder.liveEmpty = UI.Text(live, "small", "muted", "CENTER")
+  holder.liveEmpty:SetPoint("CENTER", live, "CENTER", 0, -10)
+  holder.liveEmpty:SetWidth(w - colW - 40)
+end
+
+local PREVIEW = {
+  { key = "THREAT_PAGE_SAMPLE_TANK", scaled = 100, isTanking = true },
+  { key = "THREAT_PAGE_SAMPLE_YOU", scaled = 92, isPlayer = true },
+  { key = "THREAT_PAGE_SAMPLE_DPS", scaled = 64 },
+}
+
+local function paintBar(bar, name, row, warn)
+  bar:Show()
+  bar.text:SetText(name)
+  bar.right:SetText(Threat.FormatPercent(row.scaled))
+  bar:SetValue((tonumber(row.scaled) or 0) / 100)
+  bar:SetColorKey(Threat.BarColor(row, warn))
+end
+
+local function refreshPage(holder)
+  if not holder.sound then return end
+  local L = HK.L
+  local db = settings()
+  holder.sound.label:SetText(L.THREAT_PAGE_SOUND)
+  holder.sound.toggle:SetState(db.sound)
+  holder.solo.label:SetText(L.THREAT_PAGE_SOLO)
+  holder.solo.toggle:SetState(db.solo)
+
+  holder.previewTitle:SetText(string.upper(L.THREAT_PAGE_PREVIEW))
+  holder.previewHeader:SetText(L.THREAT_YOU:format("92%"))
+  for i, sample in ipairs(PREVIEW) do paintBar(holder.previewBars[i], L[sample.key], sample, true) end
+  holder.previewNote:SetText(L.THREAT_PAGE_PREVIEW_NOTE)
+
+  holder.liveTitle:SetText(string.upper(L.THREAT_PAGE_LIVE))
+  local ok, rows, reason = pcall(Threat.Read)
+  if not ok then
+    HK.Diag.Record(NAME, "Read", rows)
+    rows, reason = nil, "missing"
+  end
+  local shown = 0
+  if rows and #rows > 0 then
+    Threat.Sort(rows)
+    local me = Threat.PlayerRow(rows)
+    local warn = Threat.ShouldWarn(me)
+    holder.liveHeader:SetText(L.THREAT_YOU:format(Threat.FormatPercent(me and me.scaled or 0)))
+    UI.SetTextColorKey(holder.liveHeader, warn and "bad" or "gold")
+    for i = 1, math.min(#rows, Threat.MAX_ROWS) do
+      local row = rows[i]
+      local name = row.name
+      if row.isTanking then name = name .. " (" .. L.THREAT_TANK_MARK .. ")" end
+      paintBar(holder.liveBars[i], name, row, warn)
+      shown = i
+    end
+  else
+    holder.liveHeader:SetText("")
+  end
+  for i = shown + 1, #holder.liveBars do holder.liveBars[i]:Hide() end
+  if shown > 0 then
+    holder.liveEmpty:SetText("")
+  elseif reason == "missing" or reason == "secret" then
+    holder.liveEmpty:SetText(L.THREAT_PAGE_NODATA)
+  elseif reason == "notarget" then
+    holder.liveEmpty:SetText(L.THREAT_PAGE_NOTARGET)
+  else
+    holder.liveEmpty:SetText(L.THREAT_PAGE_EMPTY)
+  end
+end
+
+Threat.Page = { build = buildPage, refresh = refreshPage }
+
+function Threat.PageHolder() return pageHolder end
+
 Threat.Module = HK:RegisterModule(NAME, {
   group = "combat", title = "MOD_THREAT", desc = "MOD_THREAT_DESC", command = "threat",
   default = false,
   presets = { minimal = false, recommended = true },
+  Page = Threat.Page,
+  Open = function() if HK.Home then HK.Home.Open(NAME) end end,
   OnEnable = function()
     registerEvents()
     ensureFrame()
@@ -326,4 +535,4 @@ Threat.Module = HK:RegisterModule(NAME, {
   end,
 })
 
-HK:RegisterCommand("threat", function(args) Threat.Command(args) end, "threat [sound] - threat display settings")
+HK:RegisterCommand("threat", function(args) Threat.Command(args) end, "threat [sound|solo] - threat display settings")
